@@ -1,0 +1,41 @@
+#include "fastLEC.hpp"
+#include "parser.hpp"
+#include <iostream>
+
+int main(int argc, char* argv[])
+{
+    try {
+        if (!fastLEC::Param::get().parse(argc, argv)) {
+            return 1;
+        }
+
+        fastLEC::Prover prover;
+        
+        bool ret = prover.read_aiger();
+        if (!ret) {
+            std::cout << "c [Main] Failed to build AIGER netlist" << std::endl;
+            return 1;
+        }
+        
+
+        
+        fastLEC::ret_vals ret_val = prover.check_cec();
+        if (ret_val == fastLEC::ret_vals::ret_SAT) {
+            std::cout << "c [Main] SAT" << std::endl;
+        } else if (ret_val == fastLEC::ret_vals::ret_UNS) {
+            std::cout << "c [Main] UNSAT" << std::endl;
+        } else {
+            std::cout << "c [Main] UNKNOWN" << std::endl;
+        }
+
+        return 0;
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Exception: " << e.what() << std::endl;
+        return 1;
+    }
+    catch (...) {
+        std::cerr << "Unknown exception occurred" << std::endl;
+        return 1;
+    }
+}

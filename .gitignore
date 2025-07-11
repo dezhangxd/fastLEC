@@ -39,3 +39,75 @@
 
 # debug information files
 *.dwo
+
+# ========================================
+# Submodule specific ignore rules
+# ========================================
+
+# XGBoost submodule
+deps/xgboost/build/
+deps/xgboost/lib/
+deps/xgboost/lib64/
+deps/xgboost/python-package/build/
+deps/xgboost/python-package/dist/
+deps/xgboost/python-package/xgboost.egg-info/
+deps/xgboost/jvm-packages/xgboost4j/target/
+deps/xgboost/jvm-packages/xgboost4j-spark/target/
+deps/xgboost/jvm-packages/xgboost4j-flink/target/
+deps/xgboost/jvm-packages/xgboost4j-example/target/
+
+# AIGER submodule
+deps/aiger/*.o
+deps/aiger/*.a
+deps/aiger/aiger
+deps/aiger/aigbmc
+deps/aiger/aigdd
+deps/aiger/aigfuzz
+deps/aiger/aiginfo
+deps/aiger/aigjoin
+deps/aiger/aigmiter
+deps/aiger/aigmove
+deps/aiger/aigsim
+deps/aiger/aigstrip
+deps/aiger/aigtoblif
+deps/aiger/aigtocnf
+deps/aiger/aigtodot
+deps/aiger/aigtosmv
+deps/aiger/andtoaig
+deps/aiger/bliftoaig
+deps/aiger/cnfctoaig
+deps/aiger/smvtoblif
+deps/aiger/smvtocnf
+deps/aiger/smvtodot
+deps/aiger/smvtosmv
+deps/aiger/temp.aag
+deps/aiger/temp.aig
+
+# Kissat submodule
+deps/kissat/build/
+deps/kissat/*.o
+deps/kissat/kissat
+deps/kissat/*.a
+deps/kissat/*.so
+deps/kissat/*.dylib
+deps/kissat/*.dll
+deps/kissat/*.exe
+deps/kissat/*.out
+
+# General submodule build artifacts
+deps/*/build/
+deps/*/CMakeFiles/
+deps/*/CMakeCache.txt
+deps/*/cmake_install.cmake
+deps/*/Makefile
+deps/*/.ninja_log
+deps/*/.ninja_deps
+deps/*/compile_commands.json
+
+# build directory
+build/
+
+logs/
+
+
+.vscode/

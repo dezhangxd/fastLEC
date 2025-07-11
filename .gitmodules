@@ -1,0 +1,11 @@
+[submodule "deps/xgboost"]
+	path = deps/xgboost
+	url = https://github.com/dmlc/xgboost.git
+
+[submodule "deps/aiger"]
+	path = deps/aiger
+	url = https://github.com/arminbiere/aiger.git
+
+[submodule "deps/kissat"]
+	path = deps/kissat
+	url = https://github.com/arminbiere/kissat.git

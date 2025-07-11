@@ -1,0 +1,168 @@
+#pragma once
+
+#include <chrono>
+#include <iostream>
+#include <vector>
+#include <functional>
+#include <random>
+
+// ----------------------------------------------------------------------------
+// basic.hpp
+// This file contains some basic definitions and functions
+// ----------------------------------------------------------------------------
+
+namespace fastLEC
+{
+
+    // SAT solver return values
+    enum ret_vals
+    {
+        ret_UNK = 0,
+        ret_SAT = 10,
+        ret_UNS = 20
+    };
+
+    // Runtime Manager - Singleton Pattern
+    // ----------------------------------------------------------------------------
+    class ResMgr
+    {
+    private:
+        std::chrono::high_resolution_clock::time_point _start_time;
+        bool _initialized = false;
+        std::mt19937 _rng;
+
+        // Private constructor for singleton
+        ResMgr() : _rng(std::random_device{}()) {}
+
+        // Delete copy constructor and assignment operator
+        ResMgr(const ResMgr &) = delete;
+        ResMgr &operator=(const ResMgr &) = delete;
+
+    public:
+        // Get singleton instance
+        static ResMgr &get();
+
+        // Initialize the runtime manager
+        void init();
+
+        // Get runtime in seconds
+        double getRuntime() const;
+
+        // Check if initialized
+        bool isInitialized() const { return _initialized; }
+
+        // Reset the timer
+        void resetTimer();
+
+        // Random number generation
+        template <typename T>
+        T random(T min, T max);
+
+        uint64_t randomUint64();
+
+        // Set random seed
+        void setSeed(uint32_t seed);
+
+        // Get random number generator reference
+        std::mt19937 &getRNG() { return _rng; }
+
+        // Destructor
+        ~ResMgr() = default;
+    };
+
+    // ----------------------------------------------------------------------------
+
+    // bitset for Simulation
+    // ----------------------------------------------------------------------------
+    class BitVector
+    {
+        uint64_t *_array = nullptr;
+        size_t _hashval = 0;
+
+        uint64_t _nBits = 0;
+        uint64_t _nArray = 0;
+
+    public:
+        static const uint64_t size_correcter = 1ull;
+        static const uint64_t bit1 = 1ull;
+        static const uint64_t bit0 = 0ull;
+        static const int bit_width = 8 * sizeof(uint64_t); // 64;
+
+        BitVector() = default;
+        BitVector(int num_bits) { resize(num_bits); }
+        BitVector(int num_bits, uint64_t val);
+        BitVector(const BitVector &rhs);
+        ~BitVector();
+        int get_size() const { return _nBits; }
+
+        int size() const { return _nBits; }
+        void resize(int sz);
+        size_t hash();
+        size_t _std_hash_BitVector() const;
+
+        // operators
+        // ---------------------------------
+        void set();
+        void reset();
+        void random();
+        void cycleFestival(uint64_t cf);
+        uint64_t operator[](int i) const;
+
+        void set(uint64_t i);
+        void reset(uint64_t i);
+
+        bool operator==(const BitVector &rhs) const;
+        bool operator!=(const BitVector &rhs) const;
+        BitVector operator=(const BitVector &rhs);
+        BitVector operator&(const BitVector &rhs) const;
+        BitVector operator|(const BitVector &rhs) const;
+        BitVector operator^(const BitVector &rhs) const;
+        BitVector operator~() const;
+        BitVector operator|=(const BitVector &rhs);
+        BitVector operator&=(const BitVector &rhs);
+        BitVector operator^=(const BitVector &rhs);
+
+        BitVector operator++();
+        BitVector operator--();
+
+        bool has_one() const;
+
+        friend std::ostream &operator<<(std::ostream &os, const BitVector &bv);
+    };
+
+} // namespace fastLEC
+
+namespace std
+{
+    template <>
+    struct hash<fastLEC::BitVector>
+    {
+        size_t operator()(const fastLEC::BitVector &bv) const
+        {
+            return bv._std_hash_BitVector();
+        };
+    };
+
+    template <>
+    struct equal_to<fastLEC::BitVector>
+    {
+        bool operator()(const fastLEC::BitVector &lhs, const fastLEC::BitVector &rhs) const
+        {
+            return lhs == rhs;
+        }
+    };
+
+    template <>
+    struct hash<std::vector<int>>
+    {
+        size_t operator()(const std::vector<int> &vec) const
+        {
+            size_t seed = vec.size();
+            for (const auto &i : vec)
+            {
+                seed ^= i + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            }
+            return seed;
+        }
+    };
+}
