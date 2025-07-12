@@ -35,7 +35,7 @@ find_package(Threads REQUIRED)
 # ========================================
 
 # XGBoost submodule
-option(USE_XGBOOST "Enable XGBoost support" ON)
+option(USE_XGBOOST "Enable XGBoost support" OFF)
 if(USE_XGBOOST AND EXISTS "${CMAKE_SOURCE_DIR}/deps/xgboost/CMakeLists.txt")
     # Set XGBoost build options to avoid ABI issues
     set(XGBOOST_USE_CUDA OFF CACHE BOOL "Build XGBoost with CUDA support" FORCE)
@@ -52,10 +52,14 @@ if(USE_XGBOOST AND EXISTS "${CMAKE_SOURCE_DIR}/deps/xgboost/CMakeLists.txt")
     
     add_subdirectory(deps/xgboost)
     set(XGBOOST_FOUND TRUE)
-    message(STATUS "XGBoost submodule found")
+    message(STATUS "XGBoost submodule found and enabled")
 else()
-    message(WARNING "XGBoost submodule not found. Run: git submodule update --init --recursive")
     set(XGBOOST_FOUND FALSE)
+    if(USE_XGBOOST)
+        message(WARNING "XGBoost submodule not found. Run: git submodule update --init --recursive")
+    else()
+        message(STATUS "XGBoost support disabled")
+    endif()
 endif()
 
 # AIGER submodule
@@ -127,6 +131,7 @@ set(SOURCES
     src/pSAT.cpp
     src/es.cpp
     src/AIG.cpp
+    src/XAG.cpp
 )
 
 # Header files
@@ -177,7 +182,7 @@ if(EXISTING_SOURCES)
     
     if(XGBOOST_FOUND)
         # XGBoost linking with proper error handling
-        find_library(XGBOOST_LIBRARY xgboost PATHS ${CMAKE_BINARY_DIR}/deps/xgboost/lib NO_DEFAULT_PATH)
+        find_library(XGBOOST_LIBRARY xgboost PATHS ${CMAKE_SOURCE_DIR}/deps/xgboost/lib NO_DEFAULT_PATH)
         if(XGBOOST_LIBRARY)
             target_link_libraries(fastLEC PRIVATE ${XGBOOST_LIBRARY})
             message(STATUS "Linked XGBoost library: ${XGBOOST_LIBRARY}")
@@ -221,7 +226,7 @@ if(BUILD_LIBRARY AND EXISTING_SOURCES)
     endif()
     
     if(XGBOOST_FOUND)
-        find_library(XGBOOST_LIBRARY xgboost PATHS ${CMAKE_BINARY_DIR}/deps/xgboost/lib NO_DEFAULT_PATH)
+        find_library(XGBOOST_LIBRARY xgboost PATHS ${CMAKE_SOURCE_DIR}/deps/xgboost/lib NO_DEFAULT_PATH)
         if(XGBOOST_LIBRARY)
             target_link_libraries(fastLEC_lib PUBLIC ${XGBOOST_LIBRARY})
         endif()

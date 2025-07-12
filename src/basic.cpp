@@ -14,7 +14,7 @@ void ResMgr::init()
     _initialized = true;
 }
 
-double ResMgr::getRuntime() const
+double ResMgr::get_runtime() const
 {
     if (!_initialized) {
         return 0.0;
@@ -23,7 +23,7 @@ double ResMgr::getRuntime() const
     return std::chrono::duration_cast<std::chrono::duration<double>>(clk_now - _start_time).count();
 }
 
-void ResMgr::resetTimer()
+void ResMgr::reset_timer()
 {
     _start_time = std::chrono::high_resolution_clock::now();
 }
@@ -41,7 +41,7 @@ T ResMgr::random(T min, T max)
     }
 }
 
-uint64_t ResMgr::randomUint64()
+uint64_t ResMgr::random_uint64()
 {
     std::uniform_int_distribution<uint64_t> dist(0, UINT64_MAX);
     return dist(_rng);
@@ -52,7 +52,7 @@ template int ResMgr::random<int>(int min, int max);
 template double ResMgr::random<double>(double min, double max);
 template uint64_t ResMgr::random<uint64_t>(uint64_t min, uint64_t max);
 
-void ResMgr::setSeed(uint32_t seed)
+void ResMgr::set_seed(uint32_t seed)
 {
     _rng.seed(seed);
 }
@@ -96,11 +96,11 @@ BitVector::~BitVector()
 
 size_t BitVector::hash()
 {
-    _hashval = _std_hash_BitVector();
+    _hashval = _std_hash_bit_vector();
     return _hashval;
 }
 
-size_t BitVector::_std_hash_BitVector() const
+size_t BitVector::_std_hash_bit_vector() const
 {
     size_t hashval = 0;
     if (_array == nullptr)
@@ -126,7 +126,7 @@ void BitVector::random()
 {
     for (unsigned i = 0; i < _nArray; i++)
     {
-        _array[i] = ResMgr::get().randomUint64();
+        _array[i] = ResMgr::get().random_uint64();
     }
 }
 
@@ -226,7 +226,7 @@ void BitVector::reset(uint64_t i)
     _array[id] = _array[id] & ~(1ull << (bit_width - pos - 1));
 }
 
-void BitVector::cycleFestival(uint64_t cf)
+void BitVector::cycle_festival(uint64_t cf)
 {
     if (cf > _nBits)
         set();

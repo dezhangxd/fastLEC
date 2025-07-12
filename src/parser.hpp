@@ -12,6 +12,7 @@ namespace fastLEC
 // X-Macro defines all modes
 #define MODES_LIST   \
     X(ES)            \
+    X(BDD)           \
     X(pES)           \
     X(SAT)           \
     X(pSAT)          \
@@ -246,7 +247,7 @@ namespace fastLEC
             }
 
             fastLEC::ResMgr::get().init();
-            fastLEC::ResMgr::get().setSeed(p.getCustomParam<int>("seed"));
+            fastLEC::ResMgr::get().set_seed(p.getCustomParam<int>("seed"));
 
             if (p.verbose > 0)
             {
@@ -268,11 +269,11 @@ namespace fastLEC
 
                 // Print basic parameters
                 printf("c [parser] threads: %u\n", p.n_threads);
-                printf("c [parser] timeout: %.2f\n", p.timeout);
+                printf("c [parser] timeout: %.2f seconds\n", p.timeout);
                 printf("c [parser] verbose: %u\n", p.verbose);
 
                 // Print custom parameters that differ from defaults
-                printf("c [parser] custom parameters:\n");
+                // printf("c [parser] custom parameters:\n");
 #define USER_PARAM(param_name, type, default_val, description)                                              \
     if (p.custom_params.param_name != default_val)                                                          \
     {                                                                                                       \

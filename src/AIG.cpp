@@ -3,23 +3,25 @@
 
 using namespace fastLEC;
 
-void AIG::set(std::shared_ptr<aiger> aig)
+void AIG::set(std::unique_ptr<aiger, std::function<void(aiger *)>> aig)
 {
-    this->aig = aig;
+    this->aig = std::move(aig);
 }
 
-std::shared_ptr<aiger> AIG::get()
+std::unique_ptr<aiger, std::function<void(aiger *)>> AIG::move()
 {
-    return this->aig;
+    return std::move(this->aig);
 }
 
-std::shared_ptr<aiger> AIG::create()
+auto AIG::create() -> std::unique_ptr<aiger, std::function<void(aiger *)>>
 {
-    return std::shared_ptr<aiger>(aiger_init(), [](aiger *aig)
-                                  {
-                                      if (aig != nullptr)
-                                          aiger_reset(aig);
-                                      aig = nullptr; });
+    auto deleter = [](aiger *aig)
+    {
+        if (aig != nullptr)
+            aiger_reset(aig);
+        aig = nullptr;
+    };
+    return std::unique_ptr<aiger, std::function<void(aiger *)>>(aiger_init(), deleter);
 }
 
 void AIG::rewrite()
@@ -88,9 +90,6 @@ bool AIG::construct(const std::string &filename)
         return false;
     }
 
-    if (fastLEC::Param::get().verbose > 0)
-        printf("c [AIG] load AIGER file with MILOA: %u %u %u %u %u\n", aig->maxvar, aig->num_inputs, aig->num_latches, aig->num_outputs, aig->num_ands);
-
     if (aig->num_latches > 0)
     {
         fprintf(stderr, "c [AIG] error: can not handle latches\n");
@@ -131,7 +130,77 @@ bool AIG::construct(const std::string &filename)
     rewrite();
 
     if (fastLEC::Param::get().verbose > 0)
-        printf("c [AIG] successfully load AIGER file: %s\n", filename.c_str());
+        printf("c [AIG] successfully load AIGER file with MILOA: %u %u %u %u %u\n", aig->maxvar, aig->num_inputs, aig->num_latches, aig->num_outputs, aig->num_ands);
 
     return true;
+}
+
+int fastLEC::aiger_var(const unsigned &aiger_lit)
+{
+    return aiger_lit2var(aiger_lit);
+}
+
+int fastLEC::aiger_pos_lit(const unsigned &aiger_var)
+{
+    return aiger_var2lit(aiger_var);
+}
+
+int fastLEC::aiger_neg_lit(const unsigned &aiger_var)
+{
+    return aiger_not(aiger_var2lit(aiger_var));
+}
+
+bool fastLEC::aiger_value(const unsigned &aiger_lit, const bool &aiger_var_val)
+{
+    if (aiger_var_val)
+        return !aiger_sign(aiger_lit);
+    else
+        return aiger_sign(aiger_lit);
+}
+
+bool fastLEC::aiger_has_same_var(const unsigned &aiger_lit0, const unsigned &aiger_lit1)
+{
+    return aiger_strip(aiger_lit0) == aiger_strip(aiger_lit1);
+}
+
+aiger_and *AIG::is_and(unsigned lit) const
+{
+    return aiger_is_and(aig.get(), lit);
+}
+
+bool AIG::is_xor(unsigned lit, unsigned *rhs0ptr, unsigned *rhs1ptr) const
+{
+    aiger_and *and_gate = is_and(lit);
+    if (!and_gate)
+        return false;
+    if (!aiger_sign(and_gate->rhs0) || !aiger_sign(and_gate->rhs1))
+        return false;
+    aiger_and *left = is_and(and_gate->rhs0);
+    if (!left)
+        return false;
+    aiger_and *right = is_and(and_gate->rhs1);
+    if (!right)
+        return false;
+    unsigned left_rhs0 = left->rhs0, left_rhs1 = left->rhs1;
+    unsigned right_rhs0 = right->rhs0, right_rhs1 = right->rhs1;
+    unsigned not_right_rhs0 = aiger_not(right_rhs0);
+    unsigned not_right_rhs1 = aiger_not(right_rhs1);
+    //      (!l0 | !l1) & (!r0 | !r1)   
+    // (A): ( r0 |  r1) & (!r0 | !r1)
+    // (B): ( r1 |  r0) & (!r0 | !r1)
+    //        r0 ^  r1                 // used
+    //        l0 ^  l1                 // not used
+    if ((left_rhs0 == not_right_rhs0 && left_rhs1 == not_right_rhs1) || //(A)
+        (left_rhs0 == not_right_rhs1 && left_rhs1 == not_right_rhs0))
+    { //(B)
+        const unsigned rhs0 = left_rhs0, rhs1 = left_rhs1;
+        if (aiger_has_same_var(rhs0, rhs1))
+            return false;
+        if (rhs0ptr)
+            *rhs0ptr = rhs0;
+        if (rhs1ptr)
+            *rhs1ptr = rhs1;
+        return true;
+    }
+    return false;
 }
