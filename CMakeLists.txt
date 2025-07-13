@@ -132,6 +132,7 @@ set(SOURCES
     src/es.cpp
     src/AIG.cpp
     src/XAG.cpp
+    src/CNF.cpp
 )
 
 # Header files

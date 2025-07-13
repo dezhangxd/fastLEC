@@ -50,14 +50,16 @@ std::ostream &operator<<(std::ostream &os, const fastLEC::XAG &xag)
         os << std::setw(8) << std::left << i << " ";
     os << std::endl;
 
-    for (int i = 0; i < xag.max_var + 1; i++)
+    for (int i : xag.used_gates)
     {
-        if (xag.gates[i].type != GateType::NUL && xag.gates[i].type != GateType::PI)
+        const Gate &g = xag.gates[i];
+        if (g.type != GateType::NUL && g.type != GateType::PI)
         {
             os << "c        ";
-            os << xag.gates[i] << std::endl;
+            os << g << std::endl;
         }
     }
+
     os << "c        PO   : " << xag.PO << std::endl;
     return os;
 }
@@ -70,7 +72,9 @@ void XAG::construct_from_aig(const fastLEC::AIG &aig)
     }
 
     this->max_var = aig.get()->maxvar;
+    this->num_PIs_org = aig.get()->num_inputs;
     this->PI.clear();
+    this->used_gates.clear();
     this->PO = aig.get()->outputs[0].lit;
     this->used_lits.resize(2 * this->max_var, false);
     this->gates.resize(this->max_var + 1);
@@ -139,7 +143,49 @@ void XAG::construct_from_aig(const fastLEC::AIG &aig)
             this->gates[aig_v].set(lhs, GateType::XOR2, rhs0, rhs1);
         else
             this->gates[aig_v].set(lhs, GateType::AND2, rhs0, rhs1);
+        this->used_gates.emplace_back(aig_v);
     }
 
     std::cout << *this << std::endl;
+}
+
+std::unique_ptr<fastLEC::CNF> XAG::construct_cnf_from_this_xag()
+{
+    std::unique_ptr<fastLEC::CNF> cnf = std::make_unique<fastLEC::CNF>();
+
+    cnf->num_vars = 0;
+
+    if (this->PO == 0)
+    {
+        cnf->num_vars = this->num_PIs_org;
+        cnf->add_clause({});
+    }
+    else if (this->PO == 1)
+    {
+        cnf->num_vars = this->num_PIs_org;
+    }
+    else
+    {
+        if(used_lits.empty())
+        {
+            printf("Error: XAG is not built correctly, used_lits is empty\n");
+            exit(1);
+        }
+        
+        this->lmap_xag_to_cnf.resize(2 * (this->max_var + 1));
+
+        if(used_lits[0] || used_lits[1])
+        {
+            lmap_xag_to_cnf[0] = -1;
+            lmap_xag_to_cnf[1] = 1;
+            cnf->num_vars++;
+            cnf->add_clause({1});
+        }
+        
+
+    }
+
+    std::cout << *cnf << std::endl;
+
+    return cnf;
 }

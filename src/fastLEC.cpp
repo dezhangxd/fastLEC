@@ -53,6 +53,7 @@ fastLEC::ret_vals Prover::check_cec()
 
     this->xag = std::make_unique<fastLEC::XAG>(*this->aig);
 
+    this->cnf = this->xag->construct_cnf_from_this_xag();
 
     if (Param::get().verbose > 0)
         printf("c [CEC] CEC check completed in %f seconds\n", fastLEC::ResMgr::get().get_runtime() - start_time);

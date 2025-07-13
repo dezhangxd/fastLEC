@@ -26,6 +26,15 @@ namespace fastLEC
         Prover(Prover &&) = default;
         Prover &operator=(Prover &&) = default;
 
+
+        void show_current_data_structure(){
+            
+            if(cnf != nullptr){printf("c [Prover] in CNF\n");}
+            else if(xag != nullptr){printf("c [Prover] in XAG\n");}
+            else if(aig != nullptr){printf("c [Prover] in AIG\n");}
+            else{printf("c [Prover] no data structure\n");}
+        }
+
         const fastLEC::AIG &get_aig() const { return *aig; }
         const fastLEC::XAG &get_xag() const { return *xag; }
         const fastLEC::CNF &get_cnf() const { return *cnf; }
