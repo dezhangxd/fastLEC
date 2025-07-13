@@ -93,6 +93,9 @@ if(AIGER_FOUND)
     target_include_directories(aiger PUBLIC ${AIGER_INCLUDE_DIRS})
     target_compile_definitions(aiger PUBLIC NDEBUG)
     
+    # Suppress warnings for AIGER library
+    target_compile_options(aiger PRIVATE -w)
+    
     # AIGER tools (optional)
     option(BUILD_AIGER_TOOLS "Build AIGER tools" OFF)
     if(BUILD_AIGER_TOOLS)
@@ -105,13 +108,59 @@ endif()
 # Kissat Library
 # ========================================
 if(KISSAT_FOUND)
-    # Kissat is typically built as a standalone executable
-    # We'll create a library target for linking
-    add_library(kissat_lib INTERFACE)
-    target_include_directories(kissat_lib INTERFACE ${KISSAT_INCLUDE_DIRS})
+    # Check if kissat has been built
+    set(KISSAT_BUILD_DIR "${CMAKE_SOURCE_DIR}/deps/kissat/build")
+    set(KISSAT_LIB_PATH "${KISSAT_BUILD_DIR}/libkissat.a")
     
-    # If you want to build Kissat as a library, you might need to modify its build system
-    message(STATUS "Kissat interface library created")
+    if(EXISTS ${KISSAT_LIB_PATH})
+        # Use the pre-built kissat library
+        add_library(kissat_lib STATIC IMPORTED)
+        set_target_properties(kissat_lib PROPERTIES
+            IMPORTED_LOCATION ${KISSAT_LIB_PATH}
+            INTERFACE_INCLUDE_DIRECTORIES ${KISSAT_INCLUDE_DIRS}
+        )
+        message(STATUS "Using pre-built kissat library: ${KISSAT_LIB_PATH}")
+    else()
+        message(STATUS "Kissat library not found, building it now...")
+        
+        # Configure kissat
+        execute_process(
+            COMMAND ${CMAKE_SOURCE_DIR}/deps/kissat/configure --quiet
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/kissat
+            RESULT_VARIABLE CONFIGURE_RESULT
+            OUTPUT_VARIABLE CONFIGURE_OUTPUT
+            ERROR_VARIABLE CONFIGURE_ERROR
+        )
+        
+        if(NOT CONFIGURE_RESULT EQUAL 0)
+            message(FATAL_ERROR "Failed to configure kissat: ${CONFIGURE_ERROR}")
+        endif()
+        
+        # Build kissat
+        execute_process(
+            COMMAND make -j${CMAKE_BUILD_PARALLEL_LEVEL}
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/kissat
+            RESULT_VARIABLE BUILD_RESULT
+            OUTPUT_VARIABLE BUILD_OUTPUT
+            ERROR_VARIABLE BUILD_ERROR
+        )
+        
+        if(NOT BUILD_RESULT EQUAL 0)
+            message(FATAL_ERROR "Failed to build kissat: ${BUILD_ERROR}")
+        endif()
+        
+        # Check if the library was created
+        if(EXISTS ${KISSAT_LIB_PATH})
+            add_library(kissat_lib STATIC IMPORTED)
+            set_target_properties(kissat_lib PROPERTIES
+                IMPORTED_LOCATION ${KISSAT_LIB_PATH}
+                INTERFACE_INCLUDE_DIRECTORIES ${KISSAT_INCLUDE_DIRS}
+            )
+            message(STATUS "Successfully built and linked kissat library: ${KISSAT_LIB_PATH}")
+        else()
+            message(FATAL_ERROR "Kissat library was not created after build")
+        endif()
+    endif()
 endif()
 
 # ========================================
@@ -133,6 +182,7 @@ set(SOURCES
     src/AIG.cpp
     src/XAG.cpp
     src/CNF.cpp
+    src/seqSAT.cpp
 )
 
 # Header files

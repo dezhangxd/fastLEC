@@ -10,30 +10,21 @@
 namespace fastLEC
 {
 
-    class Prover
+    class Prove_Task
     {
         std::unique_ptr<fastLEC::AIG> aig;
         std::unique_ptr<fastLEC::XAG> xag;
         std::unique_ptr<fastLEC::CNF> cnf;
 
     public:
-        Prover() = default;
-        ~Prover() = default;
+        Prove_Task() = default;
+        ~Prove_Task() = default;
 
-        Prover(const Prover &) = delete;
-        Prover &operator=(const Prover &) = delete;
+        Prove_Task(const Prove_Task &) = delete;
+        Prove_Task &operator=(const Prove_Task &) = delete;
 
-        Prover(Prover &&) = default;
-        Prover &operator=(Prover &&) = default;
-
-
-        void show_current_data_structure(){
-            
-            if(cnf != nullptr){printf("c [Prover] in CNF\n");}
-            else if(xag != nullptr){printf("c [Prover] in XAG\n");}
-            else if(aig != nullptr){printf("c [Prover] in AIG\n");}
-            else{printf("c [Prover] no data structure\n");}
-        }
+        Prove_Task(Prove_Task &&) = default;
+        Prove_Task &operator=(Prove_Task &&) = default;
 
         const fastLEC::AIG &get_aig() const { return *aig; }
         const fastLEC::XAG &get_xag() const { return *xag; }
@@ -46,6 +37,29 @@ namespace fastLEC
         bool has_aig() const { return aig != nullptr; }
         bool has_xag() const { return xag != nullptr; }
         bool has_cnf() const { return cnf != nullptr; }
+
+        // Setter methods
+        void set_aig(std::unique_ptr<fastLEC::AIG> aig_ptr) { aig = std::move(aig_ptr); }
+        void set_xag(std::unique_ptr<fastLEC::XAG> xag_ptr) { xag = std::move(xag_ptr); }
+        void set_cnf(std::unique_ptr<fastLEC::CNF> cnf_ptr) { cnf = std::move(cnf_ptr); }
+
+        // construct XAG or CNF from AIG
+        bool build_xag();
+        bool build_cnf();
+
+        // CEC engine
+        ret_vals seq_sat_kissat(); // call kissat
+        ret_vals seq_es_org();     // call slow es engine in hybrid-CEC
+        ret_vals seq_bdd_cudd();   // call cudd
+    };
+
+    class Prover
+    {
+        std::unique_ptr<fastLEC::Prove_Task> main_task;
+
+    public:
+        Prover() = default;
+        ~Prover() = default;
 
         //---------------------------------------------------
         // read aiger filename from Param if filename = ""

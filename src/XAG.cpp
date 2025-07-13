@@ -76,7 +76,8 @@ void XAG::construct_from_aig(const fastLEC::AIG &aig)
     this->PI.clear();
     this->used_gates.clear();
     this->PO = aig.get()->outputs[0].lit;
-    this->used_lits.resize(2 * this->max_var, false);
+    this->used_lits.resize(2 * (this->max_var + 1), false);
+    
     this->gates.resize(this->max_var + 1);
 
     if (this->PO == 0 || this->PO == 1)
@@ -232,17 +233,6 @@ std::unique_ptr<fastLEC::CNF> XAG::construct_cnf_from_this_xag()
     }
 
     std::cout << *cnf << std::endl;
-
-    for(int i = 0; i < used_lits.size(); i++)
-    {
-        if(used_lits[i])
-        {
-            printf("used_lits[%d] = true\n", to_cnf_lit(i));
-        }else
-        {
-            printf("used_lits[%d] = false\n", to_cnf_lit(i));
-        }
-    }
 
     return cnf;
 }
