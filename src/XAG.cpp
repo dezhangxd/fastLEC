@@ -154,6 +154,8 @@ std::unique_ptr<fastLEC::CNF> XAG::construct_cnf_from_this_xag()
     std::unique_ptr<fastLEC::CNF> cnf = std::make_unique<fastLEC::CNF>();
 
     cnf->num_vars = 0;
+    cnf->use_mapper = true;
+    cnf->vmap_cnf_to_xag.clear();
 
     if (this->PO == 0)
     {
@@ -166,26 +168,92 @@ std::unique_ptr<fastLEC::CNF> XAG::construct_cnf_from_this_xag()
     }
     else
     {
-        if(used_lits.empty())
+        if (used_lits.empty())
         {
             printf("Error: XAG is not built correctly, used_lits is empty\n");
             exit(1);
         }
-        
+
         this->lmap_xag_to_cnf.resize(2 * (this->max_var + 1));
 
-        if(used_lits[0] || used_lits[1])
+        if (used_lits[0] || used_lits[1])
         {
             lmap_xag_to_cnf[0] = -1;
             lmap_xag_to_cnf[1] = 1;
-            cnf->num_vars++;
+            cnf->add_a_variable(1);
             cnf->add_clause({1});
         }
-        
 
+        for (int i : PI)
+        {
+            cnf->add_a_variable(aiger_var(i));
+            lmap_xag_to_cnf[i] = cnf->num_vars;
+            lmap_xag_to_cnf[aiger_not(i)] = -cnf->num_vars;
+        }
+
+        for (int i : used_gates)
+        {
+            const Gate &g = gates[i];
+            unsigned lhs = g.output;
+            unsigned not_lhs = aiger_not(lhs);
+
+            cnf->add_a_variable(aiger_var(lhs));
+            lmap_xag_to_cnf[lhs] = cnf->num_vars;
+            lmap_xag_to_cnf[not_lhs] = -cnf->num_vars;
+
+            int o = cnf->num_vars;
+            int i0 = to_cnf_lit(g.inputs[0]);
+            int i1 = to_cnf_lit(g.inputs[1]);
+
+            if(used_lits[lhs])
+            {
+                if(g.type == GateType::XOR2)
+                {
+                    cnf->add_clause({-o, i0, i1});
+                    cnf->add_clause({-o, -i0, -i1});
+                }else{
+                    cnf->add_clause({-o, i0});
+                    cnf->add_clause({-o, i1});
+                }  
+            }
+            if(used_lits[not_lhs])
+            {
+                if(g.type == GateType::XOR2)
+                {
+                    cnf->add_clause({o, i0, -i1});
+                    cnf->add_clause({o, -i0, i1});
+                }else{
+                    cnf->add_clause({o, -i0, -i1});
+                }
+            }
+        }
+
+        cnf->add_clause({to_cnf_lit(this->PO)});
     }
 
     std::cout << *cnf << std::endl;
 
+    for(int i = 0; i < used_lits.size(); i++)
+    {
+        if(used_lits[i])
+        {
+            printf("used_lits[%d] = true\n", to_cnf_lit(i));
+        }else
+        {
+            printf("used_lits[%d] = false\n", to_cnf_lit(i));
+        }
+    }
+
     return cnf;
+}
+
+
+int fastLEC::XAG::to_cnf_var(int xag_var)
+{
+    return lmap_xag_to_cnf[aiger_pos_lit(xag_var)];
+}
+
+int fastLEC::XAG::to_cnf_lit(int xag_lit)
+{
+    return lmap_xag_to_cnf[xag_lit];
 }

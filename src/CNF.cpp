@@ -1,6 +1,8 @@
 #include "CNF.hpp"
 #include <iomanip>
 
+#include "AIG.hpp"
+
 using namespace fastLEC;
 
 std::ostream &operator<<(std::ostream &os, const fastLEC::CNF &cnf)
@@ -53,6 +55,6 @@ int fastLEC::CNF::to_xag_lit(int cnf_lit)
     if(cnf_lit > 0){
         return to_xag_var(cnf_lit);
     }else{
-        return aig_neg_lit(to_xag_var(-cnf_lit));
+        return aiger_neg_lit(to_xag_var(-cnf_lit));
     }
 }
