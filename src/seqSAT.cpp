@@ -28,9 +28,17 @@ ret_vals fastLEC::Prove_Task::seq_sat_kissat()
     {
         end_pos = this->cnf->cls_end_pos[i];
         for (int j = start_pos; j < end_pos; j++)
+        {
             kissat_add(solver.get(), this->cnf->lits[j]);
+        }
         kissat_add(solver.get(), 0);
         start_pos = end_pos;
+    }
+
+    for (int al : this->cnf->assumptions)
+    {
+        kissat_add(solver.get(), al);
+        kissat_add(solver.get(), 0);
     }
 
     double time_resource = Param::get().timeout - fastLEC::ResMgr::get().get_runtime();
@@ -55,15 +63,14 @@ ret_vals fastLEC::Prove_Task::seq_sat_kissat()
 
     if (fastLEC::Param::get().verbose > 0)
     {
-        printf("c [SAT] result = %d [var = %d, clause = %d] [time = %.2f]\n",
-               ret, this->cnf->num_vars, this->cnf->num_clauses(), fastLEC::ResMgr::get().get_runtime() - start_time);
+        printf("c [SAT] result = %d [var = %d, clause = %d, lit = %d] [time = %.2f]\n",
+               ret, this->cnf->num_vars, this->cnf->num_clauses(), this->cnf->num_lits(), fastLEC::ResMgr::get().get_runtime() - start_time);
     }
 
-    // Convert kissat result to our ret_vals
-    if (ret == 10)  // SAT
+    if (ret == 10) // SAT
         return ret_vals::ret_SAT;
-    else if (ret == 20)  // UNSAT
+    else if (ret == 20) // UNSAT
         return ret_vals::ret_UNS;
-    else  // UNKNOWN or other
+    else // UNKNOWN or other
         return ret_vals::ret_UNK;
 }

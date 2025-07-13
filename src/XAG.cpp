@@ -1,4 +1,5 @@
 #include "XAG.hpp"
+#include "parser.hpp"
 
 #include <cassert>
 #include <iomanip>
@@ -77,7 +78,7 @@ void XAG::construct_from_aig(const fastLEC::AIG &aig)
     this->used_gates.clear();
     this->PO = aig.get()->outputs[0].lit;
     this->used_lits.resize(2 * (this->max_var + 1), false);
-    
+
     this->gates.resize(this->max_var + 1);
 
     if (this->PO == 0 || this->PO == 1)
@@ -147,7 +148,8 @@ void XAG::construct_from_aig(const fastLEC::AIG &aig)
         this->used_gates.emplace_back(aig_v);
     }
 
-    std::cout << *this << std::endl;
+    if(fastLEC::Param::get().verbose > 2)
+        std::cout << *this << std::endl;
 }
 
 std::unique_ptr<fastLEC::CNF> XAG::construct_cnf_from_this_xag()
@@ -232,7 +234,8 @@ std::unique_ptr<fastLEC::CNF> XAG::construct_cnf_from_this_xag()
         cnf->add_clause({to_cnf_lit(this->PO)});
     }
 
-    std::cout << *cnf << std::endl;
+    if(fastLEC::Param::get().verbose > 2)
+        std::cout << *cnf << std::endl;
 
     return cnf;
 }
