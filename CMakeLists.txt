@@ -82,6 +82,30 @@ else()
     set(KISSAT_FOUND FALSE)
 endif()
 
+# CUDD submodule
+option(USE_CUDD "Enable CUDD support" ON)
+if(USE_CUDD AND EXISTS "${CMAKE_SOURCE_DIR}/deps/cudd/configure.ac")
+    set(CUDD_FOUND TRUE)
+    set(CUDD_INCLUDE_DIRS 
+        "${CMAKE_SOURCE_DIR}/deps/cudd"
+        "${CMAKE_SOURCE_DIR}/deps/cudd/cudd"
+        "${CMAKE_SOURCE_DIR}/deps/cudd/mtr"
+        "${CMAKE_SOURCE_DIR}/deps/cudd/st"
+        "${CMAKE_SOURCE_DIR}/deps/cudd/util"
+        "${CMAKE_SOURCE_DIR}/deps/cudd/epd"
+        "${CMAKE_SOURCE_DIR}/deps/cudd/dddmp"
+        "${CMAKE_SOURCE_DIR}/deps/cudd/cplusplus"
+    )
+    message(STATUS "CUDD submodule found and enabled")
+else()
+    set(CUDD_FOUND FALSE)
+    if(USE_CUDD)
+        message(WARNING "CUDD submodule not found. Run: git submodule update --init --recursive")
+    else()
+        message(STATUS "CUDD support disabled")
+    endif()
+endif()
+
 # ========================================
 # AIGER Library
 # ========================================
@@ -164,6 +188,81 @@ if(KISSAT_FOUND)
 endif()
 
 # ========================================
+# CUDD Library
+# ========================================
+if(CUDD_FOUND)
+    # Check if CUDD has been built
+    set(CUDD_BUILD_DIR "${CMAKE_SOURCE_DIR}/deps/cudd")
+    set(CUDD_LIB_PATH "${CUDD_BUILD_DIR}/cudd/.libs/libcudd.a")
+    
+    if(EXISTS ${CUDD_LIB_PATH})
+        # Use the pre-built CUDD library
+        add_library(cudd_lib STATIC IMPORTED)
+        set_target_properties(cudd_lib PROPERTIES
+            IMPORTED_LOCATION ${CUDD_LIB_PATH}
+        )
+        target_include_directories(cudd_lib INTERFACE ${CUDD_INCLUDE_DIRS})
+        message(STATUS "Using pre-built CUDD library: ${CUDD_LIB_PATH}")
+    else()
+        message(STATUS "CUDD library not found, building it now...")
+        
+        # Generate build files with autoreconf
+        set(ENV{PATH} "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+        execute_process(
+            COMMAND autoreconf -i
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/cudd
+            RESULT_VARIABLE AUTORECONF_RESULT
+            OUTPUT_VARIABLE AUTORECONF_OUTPUT
+            ERROR_VARIABLE AUTORECONF_ERROR
+        )
+        
+        if(NOT AUTORECONF_RESULT EQUAL 0)
+            message(FATAL_ERROR "Failed to run autoreconf for CUDD: ${AUTORECONF_ERROR}")
+        endif()
+        
+        # Configure CUDD
+        set(ENV{PATH} "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+        execute_process(
+            COMMAND ${CMAKE_SOURCE_DIR}/deps/cudd/configure --quiet --enable-silent-rules --enable-shared --enable-obj
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/cudd
+            RESULT_VARIABLE CONFIGURE_RESULT
+            OUTPUT_VARIABLE CONFIGURE_OUTPUT
+            ERROR_VARIABLE CONFIGURE_ERROR
+        )
+        
+        if(NOT CONFIGURE_RESULT EQUAL 0)
+            message(FATAL_ERROR "Failed to configure CUDD: ${CONFIGURE_ERROR}")
+        endif()
+        
+        # Build CUDD
+        set(ENV{PATH} "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+        execute_process(
+            COMMAND make -j${CMAKE_BUILD_PARALLEL_LEVEL}
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/cudd
+            RESULT_VARIABLE BUILD_RESULT
+            OUTPUT_VARIABLE BUILD_OUTPUT
+            ERROR_VARIABLE BUILD_ERROR
+        )
+        
+        if(NOT BUILD_RESULT EQUAL 0)
+            message(FATAL_ERROR "Failed to build CUDD: ${BUILD_ERROR}")
+        endif()
+        
+        # Check if the library was created
+        if(EXISTS ${CUDD_LIB_PATH})
+            add_library(cudd_lib STATIC IMPORTED)
+            set_target_properties(cudd_lib PROPERTIES
+                IMPORTED_LOCATION ${CUDD_LIB_PATH}
+            )
+            target_include_directories(cudd_lib INTERFACE ${CUDD_INCLUDE_DIRS})
+            message(STATUS "Successfully built and linked CUDD library: ${CUDD_LIB_PATH}")
+        else()
+            message(FATAL_ERROR "CUDD library was not created after build")
+        endif()
+    endif()
+endif()
+
+# ========================================
 # Main Application
 # ========================================
 
@@ -183,6 +282,7 @@ set(SOURCES
     src/XAG.cpp
     src/CNF.cpp
     src/seqSAT.cpp
+    src/cudd.cpp
 )
 
 # Header files
@@ -231,6 +331,11 @@ if(EXISTING_SOURCES)
         target_include_directories(fastLEC PRIVATE ${KISSAT_INCLUDE_DIRS})
     endif()
     
+    if(CUDD_FOUND)
+        target_link_libraries(fastLEC PRIVATE cudd_lib)
+        target_include_directories(fastLEC PRIVATE ${CUDD_INCLUDE_DIRS})
+    endif()
+    
     if(XGBOOST_FOUND)
         # XGBoost linking with proper error handling
         find_library(XGBOOST_LIBRARY xgboost PATHS ${CMAKE_SOURCE_DIR}/deps/xgboost/lib NO_DEFAULT_PATH)
@@ -274,6 +379,10 @@ if(BUILD_LIBRARY AND EXISTING_SOURCES)
     
     if(KISSAT_FOUND)
         target_link_libraries(fastLEC_lib PUBLIC kissat_lib)
+    endif()
+    
+    if(CUDD_FOUND)
+        target_link_libraries(fastLEC_lib PUBLIC cudd_lib)
     endif()
     
     if(XGBOOST_FOUND)
@@ -334,6 +443,8 @@ message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "Use XGBoost: ${USE_XGBOOST}")
 message(STATUS "XGBoost: ${XGBOOST_FOUND}")
+message(STATUS "Use CUDD: ${USE_CUDD}")
+message(STATUS "CUDD: ${CUDD_FOUND}")
 message(STATUS "AIGER: ${AIGER_FOUND}")
 message(STATUS "Kissat: ${KISSAT_FOUND}")
 message(STATUS "Build tests: ${BUILD_TESTS}")

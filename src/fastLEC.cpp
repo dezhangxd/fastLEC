@@ -97,7 +97,8 @@ fastLEC::ret_vals Prover::check_cec()
         return ret_vals::ret_UNK;
     }
 
-    ret_vals ret = main_task->seq_sat_kissat();
+    // ret_vals ret = main_task->seq_sat_kissat();
+    ret_vals ret = main_task->seq_bdd_cudd();
 
 
     if (Param::get().verbose > 0)

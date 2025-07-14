@@ -9,3 +9,6 @@
 [submodule "deps/kissat"]
 	path = deps/kissat
 	url = https://github.com/arminbiere/kissat.git
+[submodule "deps/cudd"]
+	path = deps/cudd
+	url = https://github.com/ivmai/cudd.git

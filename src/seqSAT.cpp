@@ -8,7 +8,7 @@ using namespace fastLEC;
 
 extern "C"
 {
-#include "kissat.h"
+#include "../deps/kissat/src/kissat.h"
 }
 
 ret_vals fastLEC::Prove_Task::seq_sat_kissat()

@@ -47,6 +47,15 @@ if [ -d "deps/aiger" ]; then
     cd ../..
 fi
 
+# Clean CUDD submodule
+if [ -d "deps/cudd" ]; then
+    echo "Cleaning CUDD submodule..."
+    cd deps/cudd
+    make clean 2>/dev/null || true
+    rm -rf cudd/.libs aclocal.m4 autom4te.cache config.h config.log config.status Makefile Makefile.in
+    cd ../..
+fi
+
 echo "Cleanup completed!"
 echo ""
 echo "To rebuild the project:"
