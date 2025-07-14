@@ -108,6 +108,7 @@ deps/*/compile_commands.json
 build/
 
 logs/
+logs_bdd/
 
 
 .vscode/

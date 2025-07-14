@@ -1,5 +1,7 @@
 #include <iostream>
 #include <ios>
+#include <cstring>
+#include <sys/stat.h>
 
 extern "C"
 {
@@ -36,6 +38,20 @@ void print_dd(DdManager *gbm, DdNode *dd, int n, int pr)
  */
 void write_dd(DdManager *gbm, DdNode *dd, char *filename)
 {
+    // 检查并创建目录
+    char dir_path[256];
+    strcpy(dir_path, filename);
+    char *last_slash = strrchr(dir_path, '/');
+    if (last_slash != NULL) {
+        *last_slash = '\0';
+        // 创建目录（如果不存在）
+        #ifdef _WIN32
+        _mkdir(dir_path);
+        #else
+        mkdir(dir_path, 0755);
+        #endif
+    }
+    
     FILE *outfile; // output file pointer for .dot file
     outfile = fopen(filename, "w");
     DdNode **ddnodearray = (DdNode **)malloc(sizeof(DdNode *)); // initialize the function array
@@ -58,7 +74,7 @@ ret_vals fastLEC::Prove_Task::seq_bdd_cudd()
     Cudd_Ref(bdd);          /*Update the reference count for the node just created.*/
     bdd = Cudd_BddToAdd(gbm, bdd); /*Convert BDD to ADD for display purpose*/
     print_dd (gbm, bdd, 2,4);   /*Print the dd to standard output*/
-    sprintf(filename, "./log/graph.dot"); /*Write .dot filename to a string*/
+    sprintf(filename, "./logs_bdd/graph.dot"); /*Write .dot filename to a string*/
     write_dd(gbm, bdd, filename);  /*Write the resulting cascade dd to a file*/
     Cudd_Quit(gbm);
 
