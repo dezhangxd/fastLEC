@@ -48,7 +48,7 @@ namespace fastLEC
 
         int max_var;                         // the max variable number in the XAG
         int num_PIs_org;                     // the number of PIs in the original AIG
-        std::vector<int> PI;                 // the used PIs
+        std::vector<int> PI;                 // the used PIs (aiger literals)
         int PO;                              // the PO (or const 0, 1)
         std::vector<Gate> gates;             // the gates (only considering AND and XOR)
         std::vector<int> used_gates;         // the used literals in the XAG

@@ -65,77 +65,103 @@ void write_dd(DdManager *gbm, DdNode *dd, char *filename)
 
 ret_vals fastLEC::Prove_Task::seq_bdd_cudd()
 {
-    char filename[256];  // 增加缓冲区大小
+
+    double start_time = fastLEC::ResMgr::get().get_runtime();
+
+    if (this->has_xag() == false)
+    {
+        printf("c [BDD] Error: XAG not found, returning UNKNOWN\n");
+        return ret_vals::ret_UNK;
+    }
+
     DdManager *gbm;
-    
-    // 检查CUDD是否正确初始化
     gbm = Cudd_Init(0, 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
-    if (!gbm) {
+    if (!gbm)
+    {
         printf("c [BDD] Error: Failed to initialize CUDD manager, returning UNKNOWN\n");
         return ret_vals::ret_UNK;
     }
 
-    DdNode *a = Cudd_bddNewVar(gbm);
-    DdNode *b = Cudd_bddNewVar(gbm);
-    
-    // 第一个半加器的sum和carry
-    DdNode *sum1 = Cudd_bddXor(gbm, a, b);
-    Cudd_Ref(sum1);
-    DdNode *carry1 = Cudd_bddAnd(gbm, a, b);
-    Cudd_Ref(carry1);
+    std::vector<DdNode *> nodes(xag->max_var + 1, nullptr);
+    nodes[0] = Cudd_ReadLogicZero(gbm);
 
-    // 第二个半加器的sum和carry
-    DdNode *nota = Cudd_Not(a);
-    DdNode *notb = Cudd_Not(b);
-    DdNode *na = Cudd_bddNand(gbm, nota, b);
-    Cudd_Ref(na);
-    DdNode *nb = Cudd_bddNand(gbm, a, notb);
-    Cudd_Ref(nb);
-    DdNode *sum2 = Cudd_bddNand(gbm, na, nb);
-    Cudd_Ref(sum2);
-    DdNode *tmp = Cudd_bddNand(gbm, a, b);
-    Cudd_Ref(tmp);
-    DdNode *carry2 = Cudd_Not(tmp);
-    Cudd_Ref(carry2);
+    for (int i : xag->PI)
+    {
+        int ivar = aiger_var(i);
+        nodes[ivar] = Cudd_bddNewVar(gbm);
+    }
 
-    // 比较两个半加器的输出
-    DdNode *xor1 = Cudd_bddXor(gbm, sum1, sum2);
-    Cudd_Ref(xor1);
-    DdNode *xor2 = Cudd_bddXor(gbm, carry1, carry2);
-    Cudd_Ref(xor2);
+    for (int gid : xag->used_gates)
+    {
+        Gate &g = xag->gates[gid];
 
-    DdNode *bdd = Cudd_bddOr(gbm, xor1, xor2);
-    Cudd_Ref(bdd);
-    
-    // 转换为ADD用于显示
-    DdNode *bdd_add = Cudd_BddToAdd(gbm, bdd);
-    Cudd_Ref(bdd_add);
+        DdNode *i1 = nodes[aiger_var(g.inputs[0])];
+        if (aiger_sign(g.inputs[0]))
+            i1 = Cudd_Not(i1);
 
-    print_dd(gbm, bdd_add, 2, 4);
-    sprintf(filename, "./logs_bdd/graph.dot");
-    write_dd(gbm, bdd_add, filename);
-    
-    // 判断结果：简化逻辑
-    ret_vals result = (Cudd_IsComplement(bdd) || bdd == Cudd_ReadLogicZero(gbm)) ? 
-                      ret_vals::ret_UNS : ret_vals::ret_SAT;
-    
-    printf("c [BDD] Result: %s\n", 
-           (result == ret_vals::ret_UNS) ? "EQUIVALENT" : "NOT EQUIVALENT");
-    
-    // 正确释放所有引用的节点
-    Cudd_RecursiveDeref(gbm, bdd_add);
-    Cudd_RecursiveDeref(gbm, bdd);
-    Cudd_RecursiveDeref(gbm, xor2);
-    Cudd_RecursiveDeref(gbm, xor1);
-    Cudd_RecursiveDeref(gbm, carry2);
-    Cudd_RecursiveDeref(gbm, tmp);
-    Cudd_RecursiveDeref(gbm, sum2);
-    Cudd_RecursiveDeref(gbm, nb);
-    Cudd_RecursiveDeref(gbm, na);
-    Cudd_RecursiveDeref(gbm, carry1);
-    Cudd_RecursiveDeref(gbm, sum1);
-    
+        DdNode *i2 = nodes[aiger_var(g.inputs[1])];
+        if (aiger_sign(g.inputs[1]))
+            i2 = Cudd_Not(i2);
+
+        if (g.type == GateType::AND2)
+        {
+            nodes[aiger_var(g.output)] = Cudd_bddAnd(gbm, i1, i2);
+        }
+        else if (g.type == GateType::XOR2)
+        {
+            nodes[aiger_var(g.output)] = Cudd_bddXor(gbm, i1, i2);
+        }
+        Cudd_Ref(nodes[aiger_var(g.output)]);
+    }
+
+    ret_vals ret = ret_vals::ret_UNK;
+
+    int po_var = aiger_var(xag->PO);
+    if (po_var < 0 || po_var > xag->max_var || nodes[po_var] == nullptr)
+    {
+        printf("c [BDD] Error: Invalid PO variable index %d or null node, returning UNKNOWN\n", po_var);
+        return ret_vals::ret_UNK;
+    }
+
+    assert(nodes[po_var] != nullptr);
+
+    if (aiger_sign(xag->PO))
+    {
+        if (nodes[po_var] == Cudd_Not(Cudd_ReadLogicZero(gbm)))
+            ret = ret_vals::ret_UNS;
+        else
+            ret = ret_vals::ret_SAT;
+    }
+    else
+    {
+        if (nodes[po_var] == Cudd_ReadLogicZero(gbm))
+            ret = ret_vals::ret_UNS;
+        else
+            ret = ret_vals::ret_SAT;
+    }
+
+    int res = 0;
+    if (ret == ret_vals::ret_SAT)
+        res = 10;
+    else if (ret == ret_vals::ret_UNS)
+        res = 20;
+    else
+        res = 0;
+
+    printf("c [BDD] result = %d, ", res);
+    printf("[nodes = %ld,", Cudd_ReadNodeCount(gbm));
+    printf(" vars = %d,", Cudd_ReadSize(gbm));
+    printf(" reorderings = %d,", Cudd_ReadReorderings(gbm));
+    printf(" memory = %ld bytes]", (long)Cudd_ReadMemoryInUse(gbm));
+    printf(" [time = %f] \n", fastLEC::ResMgr::get().get_runtime() - start_time);
+
+    for (int i = 0; i <= xag->max_var; i++)
+    {
+        if (nodes[i] != nullptr)
+            Cudd_RecursiveDeref(gbm, nodes[i]);
+    }
+
     Cudd_Quit(gbm);
 
-    return result;
+    return ret;
 }
