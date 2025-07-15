@@ -97,8 +97,15 @@ fastLEC::ret_vals Prover::check_cec()
         return ret_vals::ret_UNK;
     }
 
-    // ret_vals ret = main_task->seq_sat_kissat();
-    ret_vals ret = main_task->seq_bdd_cudd();
+    ret_vals ret = ret_vals::ret_UNK;
+    if(Param::get().mode == Mode::SAT)
+    {
+        ret = main_task->seq_sat_kissat();
+    }
+    else if(Param::get().mode == Mode::BDD)
+    {
+        ret = main_task->seq_bdd_cudd();
+    }
 
 
     if (Param::get().verbose > 0)
