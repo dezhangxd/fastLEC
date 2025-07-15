@@ -105,8 +105,10 @@ fastLEC::ret_vals Prover::check_cec()
     else if(Param::get().mode == Mode::BDD)
     {
         ret = main_task->seq_bdd_cudd();
+    }else if(Param::get().mode == Mode::ES)
+    {
+        ret = main_task->seq_es_org();
     }
-
 
     if (Param::get().verbose > 0)
         printf("c [CEC] CEC check completed in %f seconds\n", fastLEC::ResMgr::get().get_runtime() - start_time);
