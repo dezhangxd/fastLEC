@@ -41,16 +41,16 @@ T ResMgr::random(T min, T max)
     }
 }
 
-uint64_t ResMgr::random_uint64()
+bv_unit_t ResMgr::random_uint64()
 {
-    std::uniform_int_distribution<uint64_t> dist(0, UINT64_MAX);
+    std::uniform_int_distribution<bv_unit_t> dist(0, UINT64_MAX);
     return dist(_rng);
 }
 
 // Explicit template instantiations for common types
 template int ResMgr::random<int>(int min, int max);
 template double ResMgr::random<double>(double min, double max);
-template uint64_t ResMgr::random<uint64_t>(uint64_t min, uint64_t max);
+template bv_unit_t ResMgr::random<bv_unit_t>(bv_unit_t min, bv_unit_t max);
 
 void ResMgr::set_seed(uint32_t seed)
 {
@@ -64,34 +64,27 @@ void ResMgr::set_seed(uint32_t seed)
 // Bitset
 // ----------------------------------------------------------------------------
 
-void BitVector::resize(int num_bits)
+BitVector::BitVector(int width)
 {
-    _nBits = num_bits;
-    if (_nBits % bit_width != 0)
+    this->resize(width);
+}
+
+void BitVector::resize(int width)
+{
+    _width = width;
+    if (_width % unit_width != 0)
     {
-        printf("c [BitVector] error: nBits %ld is not a multiple of bit_width %d\n", _nBits, bit_width);
+        printf("c [BitVector] error: nBits %ld is not a multiple of bit_width %d\n", _width, unit_width);
         exit(0);
     }
-    _nArray = _nBits / bit_width;
-    if (_array != nullptr)
-        delete[] _array;
-    _array = new uint64_t[_nArray];
+    _array.resize(_width / unit_width);
 }
 
 BitVector::BitVector(const BitVector &rhs)
 {
-    _nBits = rhs._nBits;
-    _nArray = rhs._nArray;
-    if (_array != nullptr)
-        delete[] _array;
-    _array = new uint64_t[_nArray];
-    std::copy(rhs._array, rhs._array + _nArray, _array);
-}
-
-BitVector::~BitVector()
-{
-    if (_array != nullptr)
-        delete[] _array;
+    _width = rhs._width;
+    _array.resize(_width / unit_width);
+    _array = rhs._array;
 }
 
 size_t BitVector::hash()
@@ -103,10 +96,11 @@ size_t BitVector::hash()
 size_t BitVector::_std_hash_bit_vector() const
 {
     size_t hashval = 0;
-    if (_array == nullptr)
+    if (_array.empty())
         hashval = 0;
-    hashval = _array[0];
-    for (unsigned i = 1; i < _nArray; i++)
+    else
+        hashval = _array[0];
+    for (unsigned i = 1; i < _array.size(); i++)
         hashval = hashval + i * _array[i];
     return hashval;
 }
@@ -114,135 +108,131 @@ size_t BitVector::_std_hash_bit_vector() const
 // -------------------------------------------------
 void BitVector::set()
 {
-    std::fill(_array, _array + _nArray, ~0ull);
+    std::fill(_array.begin(), _array.end(), ~0ull);
 }
 
 void BitVector::reset()
 {
-    std::fill(_array, _array + _nArray, 0ull);
+    std::fill(_array.begin(), _array.end(), 0ull);
 }
 
 void BitVector::random()
 {
-    for (unsigned i = 0; i < _nArray; i++)
+    for (unsigned i = 0; i < _array.size(); i++)
     {
         _array[i] = ResMgr::get().random_uint64();
     }
 }
 
-uint64_t BitVector::operator[](int i) const
+bv_unit_t BitVector::operator[](int i) const
 {
-    int id = i / bit_width;
-    int pos = i % bit_width;
+    int id = i / unit_width;
+    int pos = i % unit_width;
 
-    return (_array[id] >> (bit_width - pos - 1)) & 1;
+    return (_array[id] >> (unit_width - pos - 1)) & 1;
 }
 
 bool BitVector::operator==(const BitVector &rhs) const
 {
-    if (_nBits != rhs._nBits)
+    if (_width != rhs._width)
         return false;
     else
-        return std::equal(_array, _array + _nArray, rhs._array);
+        return _array == rhs._array;
 }
 
 BitVector BitVector::operator=(const BitVector &rhs)
 {
-    if (_array != nullptr)
-        delete[] _array;
-    _nBits = rhs._nBits;
-    _nArray = rhs._nArray;
-    _array = new uint64_t[_nArray];
-    for (unsigned i = 0; i < _nArray; i++)
-        _array[i] = rhs._array[i];
+    _width = rhs._width;
+    _array.resize(_width / unit_width);
+    _array = rhs._array;
     return *this;
 }
 
 BitVector BitVector::operator&(const BitVector &rhs) const
 {
-    BitVector res(_nBits);
-    for (unsigned i = 0; i < _nArray; i++)
+    BitVector res(_width);
+    for (unsigned i = 0; i < _array.size(); i++)
         res._array[i] = _array[i] & rhs._array[i];
     return res;
 }
 
 BitVector BitVector::operator|(const BitVector &rhs) const
 {
-    BitVector res(_nBits);
-    for (unsigned i = 0; i < _nArray; i++)
+    BitVector res(_width);
+    for (unsigned i = 0; i < _array.size(); i++)
         res._array[i] = _array[i] | rhs._array[i];
     return res;
 }
 
 BitVector BitVector::operator^(const BitVector &rhs) const
 {
-    BitVector res(_nBits);
-    for (unsigned i = 0; i < _nArray; i++)
+    BitVector res(_width);
+    for (unsigned i = 0; i < _array.size(); i++)
         res._array[i] = _array[i] ^ rhs._array[i];
     return res;
 }
 
 BitVector BitVector::operator~() const
 {
-    BitVector res(_nBits);
-    for (unsigned i = 0; i < _nArray; i++)
+    BitVector res(_width);
+    for (unsigned i = 0; i < _array.size(); i++)
         res._array[i] = ~_array[i];
     return res;
 }
 
 BitVector BitVector::operator|=(const BitVector &rhs)
 {
-    for (unsigned i = 0; i < _nArray; i++)
+    for (unsigned i = 0; i < _array.size(); i++)
         _array[i] |= rhs._array[i];
     return *this;
 }
 
 BitVector BitVector::operator&=(const BitVector &rhs)
 {
-    for (unsigned i = 0; i < _nArray; i++)
+    for (unsigned i = 0; i < _array.size(); i++)
         _array[i] &= rhs._array[i];
     return *this;
 }
 
 bool BitVector::operator!=(const BitVector &rhs) const
 {
-    if (_nBits != rhs._nBits)
+    if (_width != rhs._width)
         return true;
     else
-        return !std::equal(_array, _array + _nArray, rhs._array);
+        return _array != rhs._array;
 }
 
-void BitVector::set(uint64_t i)
+void BitVector::set(bv_unit_t i)
 {
-    int id = i / bit_width;
-    int pos = i % bit_width;
-    _array[id] = _array[id] | (1ull << (bit_width - pos - 1));
+    int id = i / unit_width;
+    int pos = i % unit_width;
+    _array[id] = _array[id] | (1ull << (unit_width - pos - 1));
 }
 
-void BitVector::reset(uint64_t i)
+void BitVector::reset(bv_unit_t i)
 {
-    int id = i / bit_width;
-    int pos = i % bit_width;
-    _array[id] = _array[id] & ~(1ull << (bit_width - pos - 1));
+    int id = i / unit_width;
+    int pos = i % unit_width;
+    _array[id] = _array[id] & ~(1ull << (unit_width - pos - 1));
 }
 
-void BitVector::cycle_festival(uint64_t cf)
+void BitVector::cycle_festival(bv_unit_t cf)
 {
-    if (cf > _nBits)
+    if (cf > _width)
         set();
-    else if (cf == _nBits || cf == 0)
+    else if (cf == _width || cf == 0)
         reset();
     else
     {
         bool val = 0;
-        uint64_t i = 0;
+        bv_unit_t i = 0;
         // reset();
 
-        while (i < _nBits)
+        while (i < _width)
         {
             if (val)
             {
-                for (uint64_t j = 0; j < cf; j++)
+                for (bv_unit_t j = 0; j < cf; j++)
                 {
                     set(i);
                     i++;
@@ -251,7 +241,7 @@ void BitVector::cycle_festival(uint64_t cf)
             }
             else
             {
-                for (uint64_t j = 0; j < cf; j++)
+                for (bv_unit_t j = 0; j < cf; j++)
                 {
                     reset(i);
                     i++;
@@ -264,7 +254,7 @@ void BitVector::cycle_festival(uint64_t cf)
 
 bool BitVector::has_one() const
 {
-    for (unsigned i = 0; i < _nArray; i++)
+    for (unsigned i = 0; i < _array.size(); i++)
         if (_array[i] != 0)
             return true;
     return false;
@@ -272,20 +262,14 @@ bool BitVector::has_one() const
 
 BitVector BitVector::operator^=(const BitVector &rhs)
 {
-    for (unsigned i = 0; i < _nArray; i++)
+    for (unsigned i = 0; i < _array.size(); i++)
         _array[i] ^= rhs._array[i];
     return *this;
 }
 
-BitVector::BitVector(int num_bits, uint64_t val)
-{
-    resize(num_bits);
-    std::fill(_array, _array + _nArray, val);
-}
-
 BitVector BitVector::operator++()
 {
-    for (int i = _nArray - 1; i >= 0; i--)
+    for (int i = _array.size() - 1; i >= 0; i--)
     {
         if (_array[i] < UINT64_MAX)
         {
@@ -299,7 +283,7 @@ BitVector BitVector::operator++()
 
 BitVector BitVector::operator--()
 {
-    for (int i = _nArray - 1; i >= 0; i--)
+    for (int i = _array.size() - 1; i >= 0; i--)
     {
         if (_array[i] > 0)
         {

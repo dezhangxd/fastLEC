@@ -6,7 +6,6 @@
 #include <type_traits>
 #include "basic.hpp"
 
-
 namespace fastLEC
 {
 // X-Macro defines all modes
@@ -23,12 +22,14 @@ namespace fastLEC
     X(dp2_sweeping)
 
 // User-defined parameters macro with descriptions
-#define USER_PARAMS                                                            \
-    USER_PARAM(learning_rate, double, 0.001, "Learning rate for optimization") \
-    USER_PARAM(max_iterations, int, 1000, "Maximum number of iterations")      \
-    USER_PARAM(epsilon, double, 1e-6, "Convergence threshold")                 \
-    USER_PARAM(use_gpu, bool, false, "Enable GPU acceleration")                \
-    USER_PARAM(batch_size, int, 32, "Batch size for processing")               \
+#define USER_PARAMS                                                                      \
+    USER_PARAM(learning_rate, double, 0.001, "Learning rate for optimization")           \
+    USER_PARAM(max_iterations, int, 1000, "Maximum number of iterations")                \
+    USER_PARAM(epsilon, double, 1e-6, "Convergence threshold")                           \
+    USER_PARAM(use_gpu, bool, false, "Enable GPU acceleration")                          \
+    USER_PARAM(ls_bv_bits, int, 17, "bitvector width in log scale for logic synthesis")  \
+    USER_PARAM(es_bv_bits, int, 12, "bitvector width in log scale for para/seq simulation") \
+    USER_PARAM(use_ies, bool, false, "Enable iES")                                       \
     USER_PARAM(seed, int, 0, "Random seed for reproducibility")
 
     // Custom parameters structure (auto-generated)
@@ -274,21 +275,21 @@ namespace fastLEC
 
                 // Print custom parameters that differ from defaults
                 // printf("c [parser] custom parameters:\n");
-#define USER_PARAM(param_name, type, default_val, description)                                              \
-    if (p.custom_params.param_name != default_val)                                                          \
-    {                                                                                                       \
-        if constexpr (std::is_same_v<type, bool>)                                                           \
-        {                                                                                                   \
+#define USER_PARAM(param_name, type, default_val, description)                                                \
+    if (p.custom_params.param_name != default_val)                                                            \
+    {                                                                                                         \
+        if constexpr (std::is_same_v<type, bool>)                                                             \
+        {                                                                                                     \
             printf("c [parser] usr:%s = %s\n", #param_name, p.custom_params.param_name ? "true" : "false");   \
-        }                                                                                                   \
-        else if constexpr (std::is_same_v<type, int>)                                                       \
-        {                                                                                                   \
+        }                                                                                                     \
+        else if constexpr (std::is_same_v<type, int>)                                                         \
+        {                                                                                                     \
             printf("c [parser] usr:%s = %d\n", #param_name, static_cast<int>(p.custom_params.param_name));    \
-        }                                                                                                   \
-        else if constexpr (std::is_same_v<type, double>)                                                    \
-        {                                                                                                   \
+        }                                                                                                     \
+        else if constexpr (std::is_same_v<type, double>)                                                      \
+        {                                                                                                     \
             printf("c [parser] usr:%s = %g\n", #param_name, static_cast<double>(p.custom_params.param_name)); \
-        }                                                                                                   \
+        }                                                                                                     \
     }
                 USER_PARAMS
 #undef USER_PARAM
@@ -300,7 +301,4 @@ namespace fastLEC
         }
     };
 
-
-
-    
 }

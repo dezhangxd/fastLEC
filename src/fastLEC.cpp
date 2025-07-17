@@ -90,24 +90,35 @@ fastLEC::ret_vals Prover::check_cec()
         return ret_vals::ret_SAT;
     }
 
-    bool b_res = main_task->build_cnf();
-    if(!b_res)
-    {
-        fprintf(stderr, "c [CEC] Error: Failed to build CNF\n");
-        return ret_vals::ret_UNK;
-    }
-
     ret_vals ret = ret_vals::ret_UNK;
     if(Param::get().mode == Mode::SAT)
     {
+        bool b_res = main_task->build_cnf();
+        if(!b_res)
+        {
+            fprintf(stderr, "c [CEC] Error: Failed to build CNF\n");
+            return ret_vals::ret_UNK;
+        }
         ret = main_task->seq_sat_kissat();
     }
     else if(Param::get().mode == Mode::BDD)
     {
+        bool b_res = main_task->build_xag();
+        if(!b_res)
+        {
+            fprintf(stderr, "c [CEC] Error: Failed to build XAG\n");
+            return ret_vals::ret_UNK;
+        }
         ret = main_task->seq_bdd_cudd();
     }else if(Param::get().mode == Mode::ES)
     {
-        ret = main_task->seq_es_org();
+        bool b_res = main_task->build_xag();
+        if(!b_res)
+        {
+            fprintf(stderr, "c [CEC] Error: Failed to build XAG\n");
+            return ret_vals::ret_UNK;
+        }
+        ret = main_task->seq_es();
     }
 
     if (Param::get().verbose > 0)

@@ -14,7 +14,6 @@ namespace fastLEC
         ~ISimulator() = default;
     };
 
-
     // the origin ES method in hybrid-CEC
     class Simulator
     {
@@ -22,16 +21,17 @@ namespace fastLEC
         std::unique_ptr<fastLEC::ISimulator> is = nullptr;
 
     public:
-        Simulator(fastLEC::XAG &xag): xag(xag) {}
+        Simulator() = delete;
+        Simulator(fastLEC::XAG &xag) : xag(xag) {}
         ~Simulator() = default;
 
         bool construct_isimu();
 
-        fastLEC::ret_vals run_ies();
+        unsigned bv_bits, para_bits, batch_bits;
+        void cal_es_bits(unsigned threads_for_es = 1);
+
         fastLEC::ret_vals run_es();
-    
-    private:
-        XAG *xag;
+        fastLEC::ret_vals run_ies();
     };
 
-}
+} // namespace fastLEC

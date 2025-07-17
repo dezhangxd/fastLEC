@@ -39,14 +39,12 @@ void print_dd(DdManager *gbm, DdNode *dd, int n, int pr)
  */
 void write_dd(DdManager *gbm, DdNode *dd, char *filename)
 {
-    // 检查并创建目录
     char dir_path[256];
     strcpy(dir_path, filename);
     char *last_slash = strrchr(dir_path, '/');
     if (last_slash != NULL)
     {
         *last_slash = '\0';
-// 创建目录（如果不存在）
 #ifdef _WIN32
         _mkdir(dir_path);
 #else

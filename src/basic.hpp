@@ -72,31 +72,29 @@ namespace fastLEC
 
     // ----------------------------------------------------------------------------
 
-    // bitset for Simulation
+    // Bit Vector for Simulation
     // ----------------------------------------------------------------------------
+    typedef uint64_t bv_unit_t;
     class BitVector
     {
-        uint64_t *_array = nullptr;
+        bv_unit_t _width = 0; // should not be too long
+        std::vector<bv_unit_t> _array;
+
         size_t _hashval = 0;
 
-        uint64_t _nBits = 0;
-        uint64_t _nArray = 0;
-
     public:
-        static const uint64_t size_correcter = 1ull;
-        static const uint64_t bit1 = 1ull;
-        static const uint64_t bit0 = 0ull;
-        static const int bit_width = 8 * sizeof(uint64_t); // 64;
+        static const bv_unit_t size_correcter = 1ull;
+        static const bv_unit_t bit1 = 1ull;
+        static const bv_unit_t bit0 = 0ull;
+        static const int unit_width = 8 * sizeof(bv_unit_t); // 64 bit for an uint64_t element
 
         BitVector() = default;
-        BitVector(int num_bits) { resize(num_bits); }
-        BitVector(int num_bits, uint64_t val);
+        BitVector(int n_bits);
         BitVector(const BitVector &rhs);
-        ~BitVector();
-        int get_size() const { return _nBits; }
+        ~BitVector() = default;
 
-        int size() const { return _nBits; }
-        void resize(int sz);
+        int size() const { return _width; }
+        void resize(int _width);
         size_t hash();
         size_t _std_hash_bit_vector() const;
 
@@ -105,11 +103,11 @@ namespace fastLEC
         void set();
         void reset();
         void random();
-        void cycle_festival(uint64_t cf);
-        uint64_t operator[](int i) const;
+        void cycle_festival(bv_unit_t cf);
+        bv_unit_t operator[](int i) const;
 
-        void set(uint64_t i);
-        void reset(uint64_t i);
+        void set(bv_unit_t i);
+        void reset(bv_unit_t i);
 
         bool operator==(const BitVector &rhs) const;
         bool operator!=(const BitVector &rhs) const;

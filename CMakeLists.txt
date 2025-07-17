@@ -277,12 +277,12 @@ set(SOURCES
     src/fastLEC.cpp
     src/basic.cpp
     src/pSAT.cpp
-    src/es.cpp
     src/AIG.cpp
     src/XAG.cpp
     src/CNF.cpp
     src/seqSAT.cpp
     src/cudd.cpp
+    src/simu.cpp
 )
 
 # Header files

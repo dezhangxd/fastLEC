@@ -49,7 +49,7 @@ namespace fastLEC
 
         // CEC engine
         ret_vals seq_sat_kissat(); // call kissat
-        ret_vals seq_es_org();     // call slow es engine in hybrid-CEC
+        ret_vals seq_es();         // call slow es engine in hybrid-CEC
         ret_vals seq_bdd_cudd();   // call cudd
     };
 
