@@ -4,8 +4,214 @@
 #include "simu.hpp"
 
 #include <algorithm>
+#include <cassert>
+#include <cstring>
 
 using namespace fastLEC;
+
+void fastLEC::ISimulator::prt_bvec(bvec_t *vec)
+{
+    for (bvec_t i = 0; i < BVEC_SIZE; i++)
+    {
+        printf("%ld", (*vec >> i) & 1);
+    }
+    printf("\n");
+}
+
+void fastLEC::ISimulator::prt_op(operation *op)
+{
+    if (op->type == OP_AND)
+        printf("AND %u \t%u \t%u\n", op->addr1, op->addr2, op->addr3);
+    else if (op->type == OP_XOR)
+        printf("XOR %u \t%u \t%u\n", op->addr1, op->addr2, op->addr3);
+    else if (op->type == OP_NOT)
+        printf("NOT %u \t%u\n", op->addr1, op->addr2);
+    else if (op->type == OP_SAVE)
+        printf("SAVE %u \t%u\n", op->addr1, op->addr2);
+}
+
+void fastLEC::ISimulator::init_glob_ES(fastLEC::XAG &xag)
+{
+
+    std::vector<unsigned> ref_cts(2 * (xag.max_var + 1), 0);
+    std::vector<unsigned> mem_addr(2 * (xag.max_var + 1), NOT_ALLOC);
+    unsigned max_mems = 0;
+    std::vector<unsigned> free_mems_stack;
+    std::vector<operation> ops;
+
+    std::function<unsigned(void)> alloc_mem = [&]() -> unsigned
+    {
+        assert(max_mems <= UINT16_MAX);
+        if (free_mems_stack.empty())
+            return max_mems++;
+        unsigned addr = free_mems_stack.back();
+        free_mems_stack.pop_back();
+        return addr;
+    };
+
+    std::function<void(unsigned)> free_mems = [&](unsigned addr)
+    {
+        free_mems_stack.push_back(addr);
+    };
+
+    // Calculate reference counts
+    for (auto &gate : xag.gates)
+    {
+        if (gate.type == fastLEC::GateType::AND2 || gate.type == fastLEC::GateType::XOR2)
+        {
+            unsigned rhs0 = gate.inputs[0];
+            unsigned rhs1 = gate.inputs[1];
+            ref_cts[rhs0]++;
+            ref_cts[rhs1]++;
+        }
+    }
+    int olit = xag.PO;
+    ref_cts[olit]++;
+
+    // considering not gates
+    for (unsigned i = 1; i < (unsigned)xag.max_var + 1; i++)
+    {
+        unsigned lit = aiger_neg_lit(i);
+        if (ref_cts[lit] > 0)
+            ref_cts[aiger_not(lit)]++;
+    }
+
+    mem_addr[0] = alloc_mem();
+    mem_addr[1] = alloc_mem();
+    assert(mem_addr[0] == const0_addr);
+    assert(mem_addr[1] == const1_addr);
+
+    for (unsigned i = 0; i < xag.PI.size(); i++)
+    {
+        unsigned lit = xag.PI[i];
+        if (ref_cts[lit] == 0)
+        {
+            printf("c [ERROR] ies glb_es construct: input lit=%u not used in the circuit\n", lit);
+            exit(0);
+        }
+        mem_addr[lit] = alloc_mem();
+        assert(lit == i + 2);
+    }
+
+    if (ref_cts[0] == 0)
+        free_mems(const0_addr);
+    if (ref_cts[1] == 0)
+        free_mems(const1_addr);
+
+    // Process gates
+    for (auto &gate : xag.gates)
+    {
+        if (gate.type == fastLEC::GateType::AND2 || gate.type == fastLEC::GateType::XOR2)
+        {
+            unsigned rhs0 = gate.inputs[0];
+            unsigned rhs1 = gate.inputs[1];
+            unsigned not_rhs0 = aiger_not(rhs0);
+            unsigned not_rhs1 = aiger_not(rhs1);
+            unsigned out = gate.output;
+
+            // Process rhs0
+            if (mem_addr[rhs0] == NOT_ALLOC)
+            {
+                if (mem_addr[not_rhs0] != NOT_ALLOC) // first use the neg symbol
+                {
+                    ref_cts[not_rhs0]--;
+                    operation op;
+                    op.type = OP_NOT;
+                    if (ref_cts[not_rhs0] == 0)
+                        mem_addr[rhs0] = mem_addr[not_rhs0];
+                    else
+                        mem_addr[rhs0] = alloc_mem();
+                    op.addr1 = mem_addr[rhs0];
+                    op.addr2 = mem_addr[not_rhs0];
+                    ops.push_back(op);
+                }
+                else
+                {
+                    printf("c [ERROR] ies glb_es left construct: rhs0=%u, not_rhs0=%u not found\n", rhs0, not_rhs0);
+                    exit(0);
+                }
+            }
+
+            // Process rhs1
+            if (mem_addr[rhs1] == NOT_ALLOC)
+            {
+                if (mem_addr[not_rhs1] != NOT_ALLOC) // first use the neg symbol
+                {
+                    ref_cts[not_rhs1]--;
+                    operation op;
+                    op.type = OP_NOT;
+                    if (ref_cts[not_rhs1] == 0)
+                        mem_addr[rhs1] = mem_addr[not_rhs1];
+                    else
+                        mem_addr[rhs1] = alloc_mem();
+                    op.addr1 = mem_addr[rhs1];
+                    op.addr2 = mem_addr[not_rhs1];
+                    ops.push_back(op);
+                }
+                else
+                {
+                    printf("c [ERROR] ies glb_es right construct: rhs1=%u, not_rhs1=%u not found\n", rhs1, not_rhs1);
+                    exit(0);
+                }
+            }
+
+            ref_cts[rhs0]--;
+            if (ref_cts[rhs0] == 0)
+                free_mems(mem_addr[rhs0]);
+
+            ref_cts[rhs1]--;
+            if (ref_cts[rhs1] == 0)
+                free_mems(mem_addr[rhs1]);
+
+            operation op;
+
+            if (gate.type == fastLEC::GateType::AND2)
+                op.type = OP_AND;
+            else
+                op.type = OP_XOR;
+
+            op.addr1 = mem_addr[out] = alloc_mem();
+            op.addr2 = mem_addr[rhs0];
+            op.addr3 = mem_addr[rhs1];
+
+            // printf("c [op] ");
+            // prt_op(&op);
+            // printf("c [op]     %u <- %u %u\n", out, rhs0, rhs1);
+            // printf("--------------------------------\n");
+
+            ops.push_back(op);
+        }
+    }
+
+    // Process output
+    unsigned po_lit = xag.PO;
+    if (mem_addr[po_lit] == NOT_ALLOC)
+    {
+        unsigned not_po_lit = aiger_not(po_lit);
+        assert(mem_addr[not_po_lit] != NOT_ALLOC);
+        operation op;
+        ref_cts[not_po_lit]--;
+        op.type = OP_NOT;
+        op.addr1 = op.addr2 = mem_addr[po_lit] = mem_addr[not_po_lit];
+        ops.push_back(op);
+    }
+
+    // Set up fast_ES structure
+    glob_es.PI_num = xag.PI.size();
+    glob_es.PO_lit = mem_addr[po_lit];
+    glob_es.mem_sz = max_mems;
+
+    glob_es.n_ops = ops.size();
+    glob_es.ops = (operation *)malloc(ops.size() * sizeof(operation));
+    if (!glob_es.ops)
+    {
+        printf("c [ERROR] translate_XAG_to_fast_ES: failed to allocate memory for ops\n");
+        exit(0);
+    }
+
+    for (unsigned i = 0; i < ops.size(); i++)
+        glob_es.ops[i] = ops[i];
+}
 
 void fastLEC::Simulator::cal_es_bits(unsigned threads_for_es)
 {
@@ -36,15 +242,108 @@ void fastLEC::Simulator::cal_es_bits(unsigned threads_for_es)
     }
 }
 
-bool fastLEC::Simulator::construct_isimu()
+int fastLEC::ISimulator::run_ies_round(uint64_t r)
 {
-    return true;
+    unsigned i, j, k;
+    operation *op;
+    bvec_t *local_mems;
+    local_mems = (bvec_t *)malloc(glob_es.mem_sz * sizeof(bvec_t));
+
+    bvec_reset(&local_mems[0]);
+    bvec_reset(&local_mems[1]);
+    i = 2;
+
+    if (glob_es.PI_num < BVEC_BIT_WIDTH)
+        memcpy(local_mems + i, festivals, glob_es.PI_num * sizeof(bvec_t));
+    else
+    {
+        memcpy(local_mems + i, festivals, BVEC_BIT_WIDTH * sizeof(bvec_t));
+        i += BVEC_BIT_WIDTH;
+
+        for (j = BVEC_BIT_WIDTH; j < glob_es.PI_num; j++)
+        {
+            k = (r >> (j - BVEC_BIT_WIDTH)) & 1ull;
+            if (k == 1)
+                bvec_set(&local_mems[i]);
+            else
+                bvec_reset(&local_mems[i]);
+            i++;
+        }
+    }
+
+    // start to simulation
+    for (i = 0; i < glob_es.n_ops; i++)
+    {
+        op = &glob_es.ops[i];
+
+        // printf("c [op] ");
+        // prt_op(op);
+        // printf("c [op] addr1: %u, addr2: %u, addr3: %u\n", op->addr1, op->addr2, op->addr3);
+        // if (op->type != OP_SAVE)
+        //     printf("addr2: "), prt_bvec(&local_mems[op->addr2]);
+        // if (op->type != OP_SAVE && op->type != OP_NOT)
+        //     printf("addr3: "), prt_bvec(&local_mems[op->addr3]);
+
+        if (op->type == OP_AND)
+            local_mems[op->addr1] = local_mems[op->addr2] & local_mems[op->addr3];
+        else if (op->type == OP_XOR)
+            local_mems[op->addr1] = local_mems[op->addr2] ^ local_mems[op->addr3];
+        else if (op->type == OP_NOT)
+            local_mems[op->addr1] = ~local_mems[op->addr2];
+
+        // printf("addr1: "), prt_bvec(&local_mems[op->addr1]);
+        // printf("--------------------------------\n");
+    }
+
+    // check result
+    if (local_mems[glob_es.PO_lit] != 0u)
+        return 10;
+    else
+        return 20;
+}
+
+int fastLEC::ISimulator::run_ies()
+{
+    // load inputs
+    unsigned mem_cost = 0;
+    mem_cost += (glob_es.mem_sz) * sizeof(bvec_t);
+    mem_cost += sizeof(unsigned) * 3;
+    mem_cost += sizeof(operation *);
+
+    printf("c [fes] Each Thread mems_cost: %d bytes\n", mem_cost);
+    unsigned es_bits = BVEC_BIT_WIDTH;
+    unsigned long long round_num = 0;
+    if (glob_es.PI_num >= es_bits)
+        round_num = 1llu << (glob_es.PI_num - es_bits);
+    else
+        round_num = 1llu;
+
+    for (unsigned long long r = 0; r < round_num; r++)
+    {
+        int res = 0;
+        if (r % 100000 == 0)
+            printf("c [fes] round %lld / %llu\n", r, round_num);
+        res = run_ies_round(r);
+        if (res == 10)
+            return 10;
+    }
+
+    return 20;
 }
 
 ret_vals fastLEC::Simulator::run_ies()
 {
+    assert(is == nullptr);
+    is = std::make_unique<fastLEC::ISimulator>();
+    is->init_glob_ES(xag);
 
-    return ret_vals::ret_UNK;
+    int res = is->run_ies();
+    if (res == 10)
+        return ret_vals::ret_SAT;
+    else if (res == 20)
+        return ret_vals::ret_UNS;
+    else
+        return ret_vals::ret_UNK;
 }
 
 ret_vals fastLEC::Simulator::run_es()
@@ -70,8 +369,6 @@ ret_vals fastLEC::Simulator::run_es()
         for (uint64_t i = 0; i < std::min((unsigned)xag.PI.size(), this->bv_bits); i++)
             refs[xag.PI[i]] = true;
 
-        // exact count eps number based on the round number;
-        // printf("c [EPS] round %8lu: ", round);
         int ct = round;
         for (unsigned i = this->bv_bits; i < xag.PI.size(); i++)
         {
@@ -82,13 +379,12 @@ ret_vals fastLEC::Simulator::run_es()
                 states[lit].reset();
             else
                 states[lit].set();
-            // printf("%d ", ct % 2);
             ct /= 2;
         }
-        // printf("\n");
 
-        for (auto &gate : xag.gates)
+        for (int i : xag.used_gates)
         {
+            auto &gate = xag.gates[i];
             if (gate.type == fastLEC::GateType::AND2 || gate.type == fastLEC::GateType::XOR2)
             {
                 int rhs0 = gate.inputs[0];
@@ -108,8 +404,6 @@ ret_vals fastLEC::Simulator::run_es()
         int olit = xag.PO;
         if (!refs[olit])
             states[olit] = ~states[aiger_not(olit)], refs[olit] = true;
-        // std::cout << "olit: " << olit << std::endl;
-        // std::cout << "states[olit]: " << states[olit] << std::endl;
         if (states[olit].has_one())
         {
             printf("c [EPS] result = 10 [round %lu] [time = %.2f]\n", round, ResMgr::get().get_runtime() - start_time);
@@ -155,13 +449,7 @@ ret_vals fastLEC::Prove_Task::seq_es()
     if (Param::get().custom_params.use_ies)
     {
         tag = "iES";
-        if (!simu.construct_isimu())
-        {
-            ret = ret_vals::ret_UNK;
-            printf("c [iES] error: failed to construct instruction simulator\n");
-        }
-        else
-            ret = simu.run_ies();
+        ret = simu.run_ies();
     }
     else
     {
