@@ -29,7 +29,8 @@ namespace fastLEC
     USER_PARAM(use_gpu, bool, false, "Enable GPU acceleration")                             \
     USER_PARAM(ls_bv_bits, int, 17, "bitvector width in log scale for logic synthesis")     \
     USER_PARAM(es_bv_bits, int, 14, "bitvector width in log scale for para/seq simulation") \
-    USER_PARAM(use_ies, bool, false, "Enable iES")                                          \
+    USER_PARAM(use_ies, bool, true, "Enable iES")                                           \
+    USER_PARAM(use_pes_pbit, bool, true, "Enable para-bits for para-es")                    \
     USER_PARAM(ies_u64, bool, false, "Enable iES with u64_int")                             \
     USER_PARAM(seed, int, 0, "Random seed for reproducibility")
 

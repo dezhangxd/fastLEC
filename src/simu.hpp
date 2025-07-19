@@ -84,6 +84,10 @@ namespace fastLEC
         fastLEC::ret_vals run_es();
         fastLEC::ret_vals run_ies();
         fastLEC::ret_vals run_ges();
+
+        unsigned cal_pes_threads(unsigned n_thread);
+        fastLEC::ret_vals run_pbits_pes(unsigned n_t);
+        fastLEC::ret_vals run_round_pes(unsigned n_t);
     };
 
 } // namespace fastLEC

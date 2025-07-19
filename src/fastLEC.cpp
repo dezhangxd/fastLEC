@@ -91,34 +91,32 @@ fastLEC::ret_vals Prover::check_cec()
     }
 
     ret_vals ret = ret_vals::ret_UNK;
-    if(Param::get().mode == Mode::SAT)
+    if (Param::get().mode == Mode::SAT)
     {
         bool b_res = main_task->build_cnf();
-        if(!b_res)
+        if (!b_res)
         {
             fprintf(stderr, "c [CEC] Error: Failed to build CNF\n");
             return ret_vals::ret_UNK;
         }
         ret = main_task->seq_sat_kissat();
     }
-    else if(Param::get().mode == Mode::BDD)
+    else if (Param::get().mode == Mode::BDD ||
+             Param::get().mode == Mode::ES ||
+             Param::get().mode == Mode::pES)
     {
         bool b_res = main_task->build_xag();
-        if(!b_res)
+        if (!b_res)
         {
             fprintf(stderr, "c [CEC] Error: Failed to build XAG\n");
             return ret_vals::ret_UNK;
         }
-        ret = main_task->seq_bdd_cudd();
-    }else if(Param::get().mode == Mode::ES)
-    {
-        bool b_res = main_task->build_xag();
-        if(!b_res)
-        {
-            fprintf(stderr, "c [CEC] Error: Failed to build XAG\n");
-            return ret_vals::ret_UNK;
-        }
-        ret = main_task->seq_es();
+        if(Param::get().mode == Mode::BDD)
+            ret = main_task->seq_bdd_cudd();
+        else if(Param::get().mode == Mode::ES)
+            ret = main_task->seq_es();
+        else if(Param::get().mode == Mode::pES)
+            ret = main_task->para_es(Param::get().n_threads);
     }
 
     if (Param::get().verbose > 0)

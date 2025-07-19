@@ -331,7 +331,8 @@ int fastLEC::ISimulator::run_ies()
     mem_cost += sizeof(unsigned) * 3;
     mem_cost += sizeof(operation *);
 
-    printf("c [iES] Each Thread mems_cost: %d bytes\n", mem_cost);
+    if (Param::get().verbose > 0)
+        printf("c [iES] Each Thread mems_cost: %d bytes\n", mem_cost);
     unsigned es_bits = BVEC_BIT_WIDTH;
     unsigned long long round_num = 0;
     if (glob_es.PI_num >= es_bits)
@@ -342,7 +343,7 @@ int fastLEC::ISimulator::run_ies()
     for (unsigned long long r = 0; r < round_num; r++)
     {
         int res = 0;
-        if (r % 100000 == 0)
+        if (Param::get().verbose > 1 && r % 100000 == 0)
             printf("c [iES] %6.2f%% : round %lld / %llu \n", (double)r / round_num * 100, r, round_num);
         res = run_ies_round(r);
         if (res == 10)
@@ -376,7 +377,7 @@ ret_vals fastLEC::Simulator::run_ies()
         unsigned long long round = 0;
         for (; round < round_num; round++)
         {
-            if (round % 100000 == 0)
+            if (Param::get().verbose > 1 && round % 100000 == 0)
                 printf("c [iES] %6.2f%% : round %lld / %llu \n", (double)round / round_num * 100, round, round_num);
             fflush(stdout);
 
@@ -388,7 +389,7 @@ ret_vals fastLEC::Simulator::run_ies()
             unsigned bvb = std::min(is->glob_es.PI_num, this->bv_bits);
             for (i = 0; i < bvb; i++)
                 loc_mem[i + 2].u64_pi(i);
-            // std::cout << "r = " << round << " : ";
+
             for (i = bvb; i < is->glob_es.PI_num; i++)
             {
                 int k = (round >> (i - bvb)) & 1ull;
@@ -396,16 +397,7 @@ ret_vals fastLEC::Simulator::run_ies()
                     loc_mem[i + 2].set();
                 else
                     loc_mem[i + 2].reset();
-
-                // std::cout << k << " ";
             }
-            // std::cout << std::endl;
-
-            // for (int j = is->glob_es.PI_num - 1; j >= 0; j--)
-            // {
-            //     std::cout << "debug * loc_mem[" << j << "] = " << loc_mem[j + 2] << std::endl;
-            // }
-            // exit(0);
 
             for (i = 0; i < is->glob_es.n_ops; i++)
             {
@@ -539,26 +531,41 @@ ret_vals fastLEC::Simulator::run_es()
 
 ret_vals fastLEC::Prove_Task::seq_es()
 {
-
-    double start_time = ResMgr::get().get_runtime();
-
     fastLEC::Simulator simu(*xag);
-
-    std::string tag = "ES";
 
     ret_vals ret = ret_vals::ret_UNK;
     if (Param::get().custom_params.use_ies)
     {
-        tag = "iES";
         ret = simu.run_ies();
     }
     else
     {
-        tag = "ES";
         ret = simu.run_es();
     }
-
-    double end_time = ResMgr::get().get_runtime();
-    printf("c [%s] runtime: %f seconds\n", tag.c_str(), end_time - start_time);
     return ret;
+}
+
+unsigned fastLEC::Simulator::cal_pes_threads(unsigned n_thread)
+{
+    if (n_thread <= 0)
+        return 0;
+    unsigned para_bits = log2(n_thread);
+    return 1 << para_bits;
+}
+
+ret_vals fastLEC::Prove_Task::para_es(int n_thread)
+{
+    fastLEC::Simulator simu(*xag);
+
+    if (Param::get().custom_params.use_pes_pbit)
+    {
+        int n_t = simu.cal_pes_threads(n_thread);
+        simu.run_pbits_pes(n_t);
+    }
+    else
+    {
+        simu.run_round_pes(n_thread);
+    }
+
+    return ret_vals::ret_UNK;
 }

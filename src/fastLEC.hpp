@@ -49,8 +49,11 @@ namespace fastLEC
 
         // CEC engine
         ret_vals seq_sat_kissat(); // call kissat
-        ret_vals seq_es();         // call slow es engine in hybrid-CEC
+        ret_vals seq_es();         // call ES
         ret_vals seq_bdd_cudd();   // call cudd
+
+        ret_vals para_es(int n_thread = 1); // call para-es engine
+        ret_vals gpu_es();              // call gpu-es engine
     };
 
     class Prover
