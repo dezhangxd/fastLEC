@@ -9,6 +9,24 @@
 
 using namespace fastLEC;
 
+bvec_t festivals[6] = {
+    0xAAAAAAAAAAAAAAAA,
+    0xCCCCCCCCCCCCCCCC,
+    0xF0F0F0F0F0F0F0F0,
+    0xFF00FF00FF00FF00,
+    0xFFFF0000FFFF0000,
+    0xFFFFFFFF00000000};
+
+void bvec_set(bvec_t *vec)
+{
+    *vec = ~0ull;
+}
+
+void bvec_reset(bvec_t *vec)
+{
+    *vec = 0ull;
+}
+
 void fastLEC::ISimulator::prt_bvec(bvec_t *vec)
 {
     for (bvec_t i = 0; i < BVEC_SIZE; i++)
@@ -310,7 +328,7 @@ int fastLEC::ISimulator::run_ies()
     mem_cost += sizeof(unsigned) * 3;
     mem_cost += sizeof(operation *);
 
-    printf("c [fes] Each Thread mems_cost: %d bytes\n", mem_cost);
+    printf("c [iES] Each Thread mems_cost: %d bytes\n", mem_cost);
     unsigned es_bits = BVEC_BIT_WIDTH;
     unsigned long long round_num = 0;
     if (glob_es.PI_num >= es_bits)
@@ -322,7 +340,7 @@ int fastLEC::ISimulator::run_ies()
     {
         int res = 0;
         if (r % 100000 == 0)
-            printf("c [fes] round %lld / %llu\n", r, round_num);
+            printf("c [iES] %6.2f%% : round %lld / %llu \n", (double)r / round_num * 100, r, round_num);
         res = run_ies_round(r);
         if (res == 10)
             return 10;
@@ -333,17 +351,79 @@ int fastLEC::ISimulator::run_ies()
 
 ret_vals fastLEC::Simulator::run_ies()
 {
+    double start_time = ResMgr::get().get_runtime();
+
     assert(is == nullptr);
     is = std::make_unique<fastLEC::ISimulator>();
     is->init_glob_ES(xag);
 
-    int res = is->run_ies();
-    if (res == 10)
-        return ret_vals::ret_SAT;
-    else if (res == 20)
-        return ret_vals::ret_UNS;
+    int res = 0;
+    if (Param::get().custom_params.ies_u64)
+        res = is->run_ies();
     else
-        return ret_vals::ret_UNK;
+    {
+        cal_es_bits(1);
+
+        unsigned long long round_num = 1llu << batch_bits;
+        unsigned long long round = 0;
+        for (; round < round_num; round++)
+        {
+            if (round % 100000 == 0)
+                printf("c [iES] %6.2f%% : round %lld / %llu \n", (double)round / round_num * 100, round, round_num);
+
+            std::vector<BitVector> loc_mem(is->glob_es.mem_sz);
+            loc_mem[0].reset();
+            loc_mem[1].set();
+
+            unsigned i = 0;
+            for (i = 0; i < std::min(is->glob_es.PI_num, this->bv_bits); i++)
+                loc_mem[i + 2].u64_pi(i);
+            for (; i < is->glob_es.PI_num; i++)
+            {
+                int k = (round >> i) & 1ull;
+                if (k == 1)
+                    loc_mem[i + 2].set();
+                else
+                    loc_mem[i + 2].reset();
+            }
+
+            for (i = 0; i < is->glob_es.n_ops; i++)
+            {
+                operation *op = &is->glob_es.ops[i];
+
+                if (op->type == OP_AND)
+                    loc_mem[op->addr1] = loc_mem[op->addr2] & loc_mem[op->addr3];
+                else if (op->type == OP_XOR)
+                    loc_mem[op->addr1] = loc_mem[op->addr2] ^ loc_mem[op->addr3];
+                else if (op->type == OP_NOT)
+                    loc_mem[op->addr1] = ~loc_mem[op->addr2];
+            }
+
+            if (loc_mem[is->glob_es.PO_lit].has_one())
+            {
+                res = 10;
+                break;
+            }
+        }
+        res = 20;
+    }
+
+    fastLEC::ret_vals ret = ret_vals::ret_UNK;
+    if (res == 10)
+        ret = ret_vals::ret_SAT;
+    else if (res == 20)
+        ret = ret_vals::ret_UNS;
+    else
+        ret = ret_vals::ret_UNK;
+
+    printf("c [iES] result = %d [bv:para:batch=%d:%d:%d] [bv_w = %3d] [nGates = %5lu] [nPI = %3lu] [num_bv = %u] [time = %.2f]\n",
+           res,
+           this->bv_bits, this->para_bits, this->batch_bits,
+           Param::get().custom_params.es_bv_bits,
+           xag.used_gates.size(), xag.PI.size(),
+           is->glob_es.mem_sz,
+           ResMgr::get().get_runtime() - start_time);
+    return ret;
 }
 
 ret_vals fastLEC::Simulator::run_es()

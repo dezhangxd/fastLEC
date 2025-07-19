@@ -22,14 +22,15 @@ namespace fastLEC
     X(dp2_sweeping)
 
 // User-defined parameters macro with descriptions
-#define USER_PARAMS                                                                      \
-    USER_PARAM(learning_rate, double, 0.001, "Learning rate for optimization")           \
-    USER_PARAM(max_iterations, int, 1000, "Maximum number of iterations")                \
-    USER_PARAM(epsilon, double, 1e-6, "Convergence threshold")                           \
-    USER_PARAM(use_gpu, bool, false, "Enable GPU acceleration")                          \
-    USER_PARAM(ls_bv_bits, int, 17, "bitvector width in log scale for logic synthesis")  \
+#define USER_PARAMS                                                                         \
+    USER_PARAM(learning_rate, double, 0.001, "Learning rate for optimization")              \
+    USER_PARAM(max_iterations, int, 1000, "Maximum number of iterations")                   \
+    USER_PARAM(epsilon, double, 1e-6, "Convergence threshold")                              \
+    USER_PARAM(use_gpu, bool, false, "Enable GPU acceleration")                             \
+    USER_PARAM(ls_bv_bits, int, 17, "bitvector width in log scale for logic synthesis")     \
     USER_PARAM(es_bv_bits, int, 12, "bitvector width in log scale for para/seq simulation") \
-    USER_PARAM(use_ies, bool, false, "Enable iES")                                       \
+    USER_PARAM(use_ies, bool, false, "Enable iES")                                          \
+    USER_PARAM(ies_u64, bool, false, "Enable iES with u64_int")                             \
     USER_PARAM(seed, int, 0, "Random seed for reproducibility")
 
     // Custom parameters structure (auto-generated)

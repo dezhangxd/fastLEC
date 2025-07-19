@@ -1,8 +1,10 @@
 #include "basic.hpp"
 
+#include <cstring>
+
 using namespace fastLEC;
 
-ResMgr& ResMgr::get()
+ResMgr &ResMgr::get()
 {
     static ResMgr instance;
     return instance;
@@ -16,7 +18,8 @@ void ResMgr::init()
 
 double ResMgr::get_runtime() const
 {
-    if (!_initialized) {
+    if (!_initialized)
+    {
         return 0.0;
     }
     auto clk_now = std::chrono::high_resolution_clock::now();
@@ -29,13 +32,16 @@ void ResMgr::reset_timer()
 }
 
 // Random number generation implementations
-template<typename T>
+template <typename T>
 T ResMgr::random(T min, T max)
 {
-    if constexpr (std::is_integral_v<T>) {
+    if constexpr (std::is_integral_v<T>)
+    {
         std::uniform_int_distribution<T> dist(min, max);
         return dist(_rng);
-    } else {
+    }
+    else
+    {
         std::uniform_real_distribution<T> dist(min, max);
         return dist(_rng);
     }
@@ -56,9 +62,6 @@ void ResMgr::set_seed(uint32_t seed)
 {
     _rng.seed(seed);
 }
-
-
-
 
 // ----------------------------------------------------------------------------
 // Bitset
@@ -216,6 +219,33 @@ void BitVector::reset(bv_unit_t i)
     _array[id] = _array[id] & ~(1ull << (unit_width - pos - 1));
 }
 
+const uint64_t festivals[6] = {
+    0xAAAAAAAAAAAAAAAA,
+    0xCCCCCCCCCCCCCCCC,
+    0xF0F0F0F0F0F0F0F0,
+    0xFF00FF00FF00FF00,
+    0xFFFF0000FFFF0000,
+    0xFFFFFFFF00000000};
+
+void BitVector::u64_pi(bv_unit_t pi_id)
+{
+    if (pi_id < 6)
+    {
+        for (unsigned i = 0; i < _array.size(); i++)
+            _array[i] = festivals[pi_id];
+    }
+    else
+    {
+        unsigned cf = 1 << (pi_id - 6);
+        uint64_t val = ~0ull;
+        for (unsigned i = 0; i < _array.size(); i += cf)
+        {
+            memset(_array.data() + i, val, cf * sizeof(uint64_t));
+            val = ~val;
+        }
+    }
+}
+
 void BitVector::cycle_festival(bv_unit_t cf)
 {
     if (cf > _width)
@@ -293,4 +323,20 @@ BitVector BitVector::operator--()
         _array[i] = UINT64_MAX;
     }
     return *this;
+}
+
+std::ostream &fastLEC::operator<<(std::ostream &os, const BitVector &bv)
+{
+    int ct = 0;
+    for (unsigned i = 0; i < bv._array.size(); i++)
+    {
+        for (unsigned j = 0; j < bv.unit_width; j++)
+        {
+            os << ((bv._array[i] >> (bv.unit_width - j - 1)) & 1);
+            if (ct % 8 == 7)
+                os << " ";
+            ct++;
+        }
+    }
+    return os;
 }

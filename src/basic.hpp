@@ -103,6 +103,7 @@ namespace fastLEC
         void set();
         void reset();
         void random();
+        void u64_pi(bv_unit_t pi_id);
         void cycle_festival(bv_unit_t cf);
         bv_unit_t operator[](int i) const;
 

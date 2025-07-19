@@ -3,67 +3,54 @@
 #include "XAG.hpp"
 #include "basic.hpp"
 
+// Instruction Simulator
+typedef uint64_t bvec_t; // other bit-vector
+extern bvec_t festivals[6];
+
+void bvec_set(bvec_t *vec);
+
+void bvec_reset(bvec_t *vec);
+
+// the operation type
+typedef enum op_type
+{
+    OP_AND,  // OP_AND addr1 addr2 addr3 : mem[addr1] <- mem[addr2] & mem[addr3]
+    OP_XOR,  // OP_XOR addr1 addr2 addr3 : mem[addr1] <- mem[addr2] ^ mem[addr3]
+    OP_NOT,  // OP_NOT addr1 addr2 : mem[addr1] <- ~mem[addr2]
+    OP_SAVE, // OP_SAVE addr1 cp_mem_addr : mem[addr1] <- copy_mems[cp_mem_addr]
+} op_type;
+
+// the longest circuit width should not longer than 2^16.
+typedef struct operation
+{
+    op_type type : 2;
+    bvec_t addr1 : 16;
+    bvec_t addr2 : 16; // or const
+    bvec_t addr3 : 16;
+} operation;
+
+typedef struct glob_ES
+{
+    uint32_t PI_num, PO_lit;
+    uint32_t mem_sz;
+
+    uint32_t n_ops;
+    operation *ops;
+} glob_ES;
+
 namespace fastLEC
 {
-
-    // Instruction Simulator
-    typedef uint64_t bvec_t; // other bit-vector
     class ISimulator
     {
-
-        bvec_t festivals[6] = {
-            0xAAAAAAAAAAAAAAAA,
-            0xCCCCCCCCCCCCCCCC,
-            0xF0F0F0F0F0F0F0F0,
-            0xFF00FF00FF00FF00,
-            0xFFFF0000FFFF0000,
-            0xFFFFFFFF00000000};
-
-        void bvec_set(bvec_t *vec)
-        {
-            *vec = ~0ull;
-        }
-
-        void bvec_reset(bvec_t *vec)
-        {
-            *vec = 0ull;
-        }
-
-        // the operation type
-        typedef enum op_type
-        {
-            OP_AND,  // OP_AND addr1 addr2 addr3 : mem[addr1] <- mem[addr2] & mem[addr3]
-            OP_XOR,  // OP_XOR addr1 addr2 addr3 : mem[addr1] <- mem[addr2] ^ mem[addr3]
-            OP_NOT,  // OP_NOT addr1 addr2 : mem[addr1] <- ~mem[addr2]
-            OP_SAVE, // OP_SAVE addr1 cp_mem_addr : mem[addr1] <- copy_mems[cp_mem_addr]
-        } op_type;
-
-        // the longest circuit width should not longer than 2^16.
-        typedef struct operation
-        {
-            op_type type : 2;
-            bvec_t addr1 : 16;
-            bvec_t addr2 : 16; // or const
-            bvec_t addr3 : 16;
-        } operation;
-
-        typedef struct glob_ES
-        {
-            uint32_t PI_num, PO_lit;
-            uint32_t mem_sz;
-
-            uint32_t n_ops;
-            operation *ops;
-        } glob_ES;
-
+    public:
         glob_ES glob_es;
+
         const uint16_t const0_addr = 0;
         const uint16_t const1_addr = 1;
         const unsigned NOT_ALLOC = -1;
         const unsigned BVEC_BIT_WIDTH = 6;
         const unsigned BVEC_SIZE = 64;
 
-    public:
         ISimulator() = default;
         ~ISimulator()
         {
