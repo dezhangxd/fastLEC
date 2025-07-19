@@ -28,7 +28,7 @@ namespace fastLEC
     USER_PARAM(epsilon, double, 1e-6, "Convergence threshold")                              \
     USER_PARAM(use_gpu, bool, false, "Enable GPU acceleration")                             \
     USER_PARAM(ls_bv_bits, int, 17, "bitvector width in log scale for logic synthesis")     \
-    USER_PARAM(es_bv_bits, int, 12, "bitvector width in log scale for para/seq simulation") \
+    USER_PARAM(es_bv_bits, int, 14, "bitvector width in log scale for para/seq simulation") \
     USER_PARAM(use_ies, bool, false, "Enable iES")                                          \
     USER_PARAM(ies_u64, bool, false, "Enable iES with u64_int")                             \
     USER_PARAM(seed, int, 0, "Random seed for reproducibility")

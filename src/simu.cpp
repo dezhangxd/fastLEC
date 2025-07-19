@@ -384,23 +384,28 @@ ret_vals fastLEC::Simulator::run_ies()
             loc_mem[0].reset();
             loc_mem[1].set();
 
-            unsigned i = 0;
-            for (i = 0; i < std::min(is->glob_es.PI_num, this->bv_bits); i++)
+            unsigned long long i = 0;
+            unsigned bvb = std::min(is->glob_es.PI_num, this->bv_bits);
+            for (i = 0; i < bvb; i++)
                 loc_mem[i + 2].u64_pi(i);
-            for (; i < is->glob_es.PI_num; i++)
+            // std::cout << "r = " << round << " : ";
+            for (i = bvb; i < is->glob_es.PI_num; i++)
             {
-                int k = (round >> i) & 1ull;
+                int k = (round >> (i - bvb)) & 1ull;
                 if (k == 1)
                     loc_mem[i + 2].set();
                 else
                     loc_mem[i + 2].reset();
-            }
 
-            for (int j = is->glob_es.PI_num - 1; j >= 0; j--)
-            {
-                std::cout << "debug * loc_mem[" << j << "] = " << loc_mem[j + 2] << std::endl;
-            } 
-            exit(0);
+                // std::cout << k << " ";
+            }
+            // std::cout << std::endl;
+
+            // for (int j = is->glob_es.PI_num - 1; j >= 0; j--)
+            // {
+            //     std::cout << "debug * loc_mem[" << j << "] = " << loc_mem[j + 2] << std::endl;
+            // }
+            // exit(0);
 
             for (i = 0; i < is->glob_es.n_ops; i++)
             {
