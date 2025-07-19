@@ -238,9 +238,12 @@ void fastLEC::Simulator::cal_es_bits(unsigned threads_for_es)
 
     para_bits = batch_bits = 0;
 
-    if (n_pi <= static_cast<unsigned>(sizeof(fastLEC::bv_unit_t)))
+    const unsigned bv_unit_t_bit_len = 8 * sizeof(fastLEC::bv_unit_t);
+    const unsigned log_bit = log2(bv_unit_t_bit_len);
+
+    if (n_pi <= log_bit)
     {
-        bv_bits = static_cast<unsigned>(sizeof(fastLEC::bv_unit_t));
+        bv_bits = log_bit;
     }
     else if (n_pi <= max_bv_bits)
     {
@@ -359,7 +362,12 @@ ret_vals fastLEC::Simulator::run_ies()
 
     int res = 0;
     if (Param::get().custom_params.ies_u64)
+    {
+        this->bv_bits = 6;
+        this->para_bits = 0;
+        this->batch_bits = is->glob_es.PI_num - this->bv_bits;
         res = is->run_ies();
+    }
     else
     {
         cal_es_bits(1);
@@ -370,8 +378,9 @@ ret_vals fastLEC::Simulator::run_ies()
         {
             if (round % 100000 == 0)
                 printf("c [iES] %6.2f%% : round %lld / %llu \n", (double)round / round_num * 100, round, round_num);
+            fflush(stdout);
 
-            std::vector<BitVector> loc_mem(is->glob_es.mem_sz);
+            std::vector<BitVector> loc_mem(is->glob_es.mem_sz, BitVector(1 << this->bv_bits));
             loc_mem[0].reset();
             loc_mem[1].set();
 
@@ -386,6 +395,12 @@ ret_vals fastLEC::Simulator::run_ies()
                 else
                     loc_mem[i + 2].reset();
             }
+
+            for (int j = is->glob_es.PI_num - 1; j >= 0; j--)
+            {
+                std::cout << "debug * loc_mem[" << j << "] = " << loc_mem[j + 2] << std::endl;
+            } 
+            exit(0);
 
             for (i = 0; i < is->glob_es.n_ops; i++)
             {
@@ -405,7 +420,8 @@ ret_vals fastLEC::Simulator::run_ies()
                 break;
             }
         }
-        res = 20;
+        if (res == 0)
+            res = 20;
     }
 
     fastLEC::ret_vals ret = ret_vals::ret_UNK;

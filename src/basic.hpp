@@ -126,13 +126,14 @@ namespace fastLEC
 
         bool has_one() const;
 
-        friend std::ostream &operator<<(std::ostream &os, const BitVector &bv);
+        friend std::ostream &operator<<(std::ostream &os, const fastLEC::BitVector &bv);
     };
 
 } // namespace fastLEC
 
 namespace std
 {
+
     template <>
     struct hash<fastLEC::BitVector>
     {

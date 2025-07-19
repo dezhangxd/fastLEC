@@ -325,18 +325,20 @@ BitVector BitVector::operator--()
     return *this;
 }
 
-std::ostream &fastLEC::operator<<(std::ostream &os, const BitVector &bv)
-{
-    int ct = 0;
-    for (unsigned i = 0; i < bv._array.size(); i++)
+namespace fastLEC {
+    std::ostream &operator<<(std::ostream &os, const BitVector &bv)
     {
-        for (unsigned j = 0; j < bv.unit_width; j++)
+        int ct = 0;
+        for (unsigned i = 0; i < bv._array.size(); i++)
         {
-            os << ((bv._array[i] >> (bv.unit_width - j - 1)) & 1);
-            if (ct % 8 == 7)
-                os << " ";
-            ct++;
+            for (unsigned j = 0; j < bv.unit_width; j++)
+            {
+                os << ((bv._array[i] >> (bv.unit_width - j - 1)) & 1);
+                if (ct % 8 == 7)
+                    os << " ";
+                ct++;
+            }
         }
+        return os;
     }
-    return os;
 }
