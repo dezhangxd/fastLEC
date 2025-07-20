@@ -44,7 +44,7 @@ extern "C"
 
     void free_gpu(glob_ES *ges);
 
-    void show_gpu_info();
+    void show_gpu_info(int dev = -1);
 
 #ifdef __cplusplus
 }
