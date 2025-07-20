@@ -103,7 +103,8 @@ fastLEC::ret_vals Prover::check_cec()
     }
     else if (Param::get().mode == Mode::BDD ||
              Param::get().mode == Mode::ES ||
-             Param::get().mode == Mode::pES)
+             Param::get().mode == Mode::pES ||
+             Param::get().mode == Mode::gpuES)
     {
         bool b_res = main_task->build_xag();
         if (!b_res)
@@ -111,12 +112,14 @@ fastLEC::ret_vals Prover::check_cec()
             fprintf(stderr, "c [CEC] Error: Failed to build XAG\n");
             return ret_vals::ret_UNK;
         }
-        if(Param::get().mode == Mode::BDD)
+        if (Param::get().mode == Mode::BDD)
             ret = main_task->seq_bdd_cudd();
-        else if(Param::get().mode == Mode::ES)
+        else if (Param::get().mode == Mode::ES)
             ret = main_task->seq_es();
-        else if(Param::get().mode == Mode::pES)
+        else if (Param::get().mode == Mode::pES)
             ret = main_task->para_es(Param::get().n_threads);
+        else if (Param::get().mode == Mode::gpuES)
+            ret = main_task->gpu_es();
     }
 
     if (Param::get().verbose > 0)

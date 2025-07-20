@@ -1,9 +1,16 @@
 cmake_minimum_required(VERSION 3.16)
-project(fastLEC VERSION 0.1.0 LANGUAGES C CXX)
+project(fastLEC VERSION 0.1.0 LANGUAGES C CXX CUDA)
+
+# Set CUDA policy to suppress warnings
+cmake_policy(SET CMP0104 NEW)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Set CUDA standard
+set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
 # Set build type if not specified
 if(NOT CMAKE_BUILD_TYPE)
@@ -22,13 +29,57 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O0")
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -g -O0")
 else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")
+    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3")
 endif()
 
 # Find required packages
 find_package(Threads REQUIRED)
+
+# ========================================
+# CUDA Configuration
+# ========================================
+option(USE_CUDA "Enable CUDA support" ON)
+if(USE_CUDA)
+    # Try modern CUDA toolkit first
+    find_package(CUDAToolkit QUIET)
+    if(CUDAToolkit_FOUND)
+        message(STATUS "CUDAToolkit found: ${CUDAToolkit_VERSION}")
+        set(CUDA_ENABLED TRUE)
+        set(CUDA_LIBRARIES cuda cudart)
+        set(CUDA_INCLUDE_DIRS ${CUDAToolkit_INCLUDE_DIRS})
+    else()
+        # Fallback to legacy CUDA finder
+        find_package(CUDA QUIET)
+        if(CUDA_FOUND)
+            message(STATUS "CUDA found: ${CUDA_VERSION}")
+            message(STATUS "CUDA include directories: ${CUDA_INCLUDE_DIRS}")
+            message(STATUS "CUDA libraries: ${CUDA_LIBRARIES}")
+            set(CUDA_ENABLED TRUE)
+        else()
+            message(WARNING "CUDA not found, disabling CUDA support")
+            set(CUDA_ENABLED FALSE)
+        endif()
+    endif()
+    
+    if(CUDA_ENABLED)
+        # Set CUDA architectures (only newer ones to avoid deprecation warnings)
+        set(CMAKE_CUDA_ARCHITECTURES 75 80 86)
+        
+        # Set CUDA specific flags
+        set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr")
+        set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-extended-lambda")
+        
+        # Enable separable compilation
+        set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
+    endif()
+else()
+    set(CUDA_ENABLED FALSE)
+    message(STATUS "CUDA support disabled")
+endif()
 
 # ========================================
 # Submodule Configuration
@@ -285,6 +336,14 @@ set(SOURCES
     src/simu.cpp
 )
 
+# CUDA source files
+if(CUDA_ENABLED)
+    set(CUDA_SOURCES
+        src/gES.cu
+    )
+    list(APPEND SOURCES ${CUDA_SOURCES})
+endif()
+
 # Header files
 set(HEADERS
     src/fastLEC.hpp
@@ -293,6 +352,7 @@ set(HEADERS
     src/XAG.hpp
     src/CNF.hpp
     src/parser.hpp
+    src/gES.h
 )
 
 # Check if source files exist and add them to the list
@@ -320,6 +380,15 @@ if(EXISTING_SOURCES)
     
     # Link libraries
     target_link_libraries(fastLEC PRIVATE Threads::Threads)
+    
+    # Link CUDA libraries
+    if(CUDA_ENABLED)
+        target_link_libraries(fastLEC PRIVATE ${CUDA_LIBRARIES})
+        target_include_directories(fastLEC PRIVATE ${CUDA_INCLUDE_DIRS})
+        set_target_properties(fastLEC PROPERTIES
+            CUDA_SEPARABLE_COMPILATION ON
+        )
+    endif()
     
     if(AIGER_FOUND)
         target_link_libraries(fastLEC PRIVATE aiger)
@@ -354,6 +423,13 @@ if(EXISTING_SOURCES)
         CXX_EXTENSIONS OFF
     )
     
+    # Set CUDA properties for the target
+    if(CUDA_ENABLED)
+        set_target_properties(fastLEC PROPERTIES
+            CUDA_ARCHITECTURES 75 80 86
+        )
+    endif()
+    
     message(STATUS "Main executable 'fastLEC' configured with ${EXISTING_SOURCES}")
 else()
     message(STATUS "No source files found in src/ directory")
@@ -372,6 +448,15 @@ if(BUILD_LIBRARY AND EXISTING_SOURCES)
     )
     
     target_link_libraries(fastLEC_lib PUBLIC Threads::Threads)
+    
+    # Link CUDA libraries for library target
+    if(CUDA_ENABLED)
+        target_link_libraries(fastLEC_lib PUBLIC ${CUDA_LIBRARIES})
+        target_include_directories(fastLEC_lib PUBLIC ${CUDA_INCLUDE_DIRS})
+        set_target_properties(fastLEC_lib PROPERTIES
+            CUDA_SEPARABLE_COMPILATION ON
+        )
+    endif()
     
     if(AIGER_FOUND)
         target_link_libraries(fastLEC_lib PUBLIC aiger)
@@ -397,6 +482,13 @@ if(BUILD_LIBRARY AND EXISTING_SOURCES)
         CXX_STANDARD_REQUIRED ON
         CXX_EXTENSIONS OFF
     )
+    
+    # Set CUDA properties for the library target
+    if(CUDA_ENABLED)
+        set_target_properties(fastLEC_lib PROPERTIES
+            CUDA_ARCHITECTURES 75 80 86
+        )
+    endif()
     
     message(STATUS "Library target 'fastLEC_lib' configured")
 endif()
@@ -441,10 +533,12 @@ message(STATUS "")
 message(STATUS "=== fastLEC Configuration Summary ===")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
+message(STATUS "CUDA standard: ${CMAKE_CUDA_STANDARD}")
 message(STATUS "Use XGBoost: ${USE_XGBOOST}")
 message(STATUS "XGBoost: ${XGBOOST_FOUND}")
 message(STATUS "Use CUDD: ${USE_CUDD}")
 message(STATUS "CUDD: ${CUDD_FOUND}")
+message(STATUS "CUDA: ${CUDA_ENABLED}")
 message(STATUS "AIGER: ${AIGER_FOUND}")
 message(STATUS "Kissat: ${KISSAT_FOUND}")
 message(STATUS "Build tests: ${BUILD_TESTS}")

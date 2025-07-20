@@ -46,8 +46,8 @@ void fastLEC::ISimulator::prt_op(operation *op)
         printf("XOR %u \t%u \t%u\n", op->addr1, op->addr2, op->addr3);
     else if (op->type == OP_NOT)
         printf("NOT %u \t%u\n", op->addr1, op->addr2);
-    else if (op->type == OP_SAVE)
-        printf("SAVE %u \t%u\n", op->addr1, op->addr2);
+    else
+        printf("UNKNOWN \n");
 }
 
 void fastLEC::ISimulator::init_glob_ES(fastLEC::XAG &xag)
@@ -233,6 +233,20 @@ void fastLEC::ISimulator::init_glob_ES(fastLEC::XAG &xag)
         glob_es.ops[i] = ops[i];
 }
 
+void fastLEC::ISimulator::init_gpu_ES(fastLEC::XAG &xag, glob_ES *ges)
+{
+    this->init_glob_ES(xag);
+    if (ges == nullptr)
+        ges = gpu_init();
+
+    ges->PI_num = glob_es.PI_num;
+    ges->PO_lit = glob_es.PO_lit;
+    ges->mem_sz = glob_es.mem_sz;
+    ges->n_ops = glob_es.n_ops;
+    ges->ops = (operation *)malloc(glob_es.n_ops * sizeof(operation));
+    memcpy(ges->ops, glob_es.ops, glob_es.n_ops * sizeof(operation));
+}
+
 void fastLEC::Simulator::cal_es_bits(unsigned threads_for_es)
 {
     unsigned max_bv_bits = Param::get().custom_params.es_bv_bits;
@@ -373,7 +387,7 @@ ret_vals fastLEC::Simulator::run_ies()
     {
         this->bv_bits = 6;
         this->para_bits = 0;
-        this->batch_bits = is->glob_es.PI_num - this->bv_bits;
+        this->batch_bits = is->glob_es.PI_num > this->bv_bits ? is->glob_es.PI_num - this->bv_bits : 0;
         res = is->run_ies();
     }
     else
@@ -730,11 +744,12 @@ fastLEC::ret_vals fastLEC::Simulator::run_round_pes(unsigned n_t)
     try
     {
         fflush(stdout);
-        unsigned long long round_num = 1llu << batch_bits;  
-        for (uint64_t i = 0; i < n_t; i++){
+        unsigned long long round_num = 1llu << batch_bits;
+        for (uint64_t i = 0; i < n_t; i++)
+        {
             unsigned long long start_round = i * round_num / n_t;
             unsigned long long end_round;
-            if(i == n_t - 1)
+            if (i == n_t - 1)
                 end_round = round_num;
             else
                 end_round = (i + 1) * round_num / n_t;
@@ -789,4 +804,31 @@ fastLEC::ret_vals fastLEC::Prove_Task::para_es(int n_thread)
     }
 
     return ret_vals::ret_UNK;
+}
+
+fastLEC::ret_vals fastLEC::Simulator::run_ges()
+{
+    double start_time = ResMgr::get().get_runtime();
+    assert(is == nullptr);
+    is = std::make_unique<fastLEC::ISimulator>();
+    glob_ES *ges = nullptr;
+    is->init_gpu_ES(xag, ges);
+
+    int res = gpu_run(ges);
+    printf("c [gpuES] result = %d [time = %.2f]\n", res, ResMgr::get().get_runtime() - start_time);
+    if (ges != nullptr)
+        free_gpu(ges);
+
+    if (res == 20)
+        return ret_vals::ret_UNS;
+    else if (res == 10)
+        return ret_vals::ret_SAT;
+    else
+        return ret_vals::ret_UNK;
+}
+
+fastLEC::ret_vals fastLEC::Prove_Task::gpu_es()
+{
+    fastLEC::Simulator simu(*xag);
+    return simu.run_ges();
 }
