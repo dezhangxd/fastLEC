@@ -29,7 +29,7 @@ namespace fastLEC
         }
 
         void init_glob_ES(fastLEC::XAG &xag);
-        void init_gpu_ES(fastLEC::XAG &xag, glob_ES *ges);
+        void init_gpu_ES(fastLEC::XAG &xag, glob_ES **ges);
 
         void prt_bvec(bvec_t *vec);
         void prt_op(operation *op);

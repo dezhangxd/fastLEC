@@ -233,18 +233,19 @@ void fastLEC::ISimulator::init_glob_ES(fastLEC::XAG &xag)
         glob_es.ops[i] = ops[i];
 }
 
-void fastLEC::ISimulator::init_gpu_ES(fastLEC::XAG &xag, glob_ES *ges)
+void fastLEC::ISimulator::init_gpu_ES(fastLEC::XAG &xag, glob_ES **ges)
 {
     this->init_glob_ES(xag);
-    if (ges == nullptr)
-        ges = gpu_init();
 
-    ges->PI_num = glob_es.PI_num;
-    ges->PO_lit = glob_es.PO_lit;
-    ges->mem_sz = glob_es.mem_sz;
-    ges->n_ops = glob_es.n_ops;
-    ges->ops = (operation *)malloc(glob_es.n_ops * sizeof(operation));
-    memcpy(ges->ops, glob_es.ops, glob_es.n_ops * sizeof(operation));
+    if ((*ges) == nullptr)
+        (*ges) = gpu_init();
+
+    (*ges)->PI_num = glob_es.PI_num;
+    (*ges)->PO_lit = glob_es.PO_lit;
+    (*ges)->mem_sz = glob_es.mem_sz;
+    (*ges)->n_ops = glob_es.n_ops;
+    (*ges)->ops = (operation *)malloc(glob_es.n_ops * sizeof(operation));
+    memcpy((*ges)->ops, glob_es.ops, glob_es.n_ops * sizeof(operation));
 }
 
 void fastLEC::Simulator::cal_es_bits(unsigned threads_for_es)
@@ -812,7 +813,7 @@ fastLEC::ret_vals fastLEC::Simulator::run_ges()
     assert(is == nullptr);
     is = std::make_unique<fastLEC::ISimulator>();
     glob_ES *ges = nullptr;
-    is->init_gpu_ES(xag, ges);
+    is->init_gpu_ES(xag, &ges);
 
     int res = gpu_run(ges);
     printf("c [gpuES] result = %d [time = %.2f]\n", res, ResMgr::get().get_runtime() - start_time);

@@ -44,9 +44,69 @@ void free_gpu(glob_ES *ges)
         free(ges);
 }
 
-
 int gpu_run(glob_ES *ges)
 {
     show_gpu_info();
-    return 0;
+    fflush(stdout);
+
+    const unsigned bv_bits = 6;
+    unsigned r_bits = (ges->PI_num > bv_bits) ? (ges->PI_num - bv_bits) : 0;
+    unsigned long long r_max = 1 << r_bits;
+
+    printf("c [gpu] PI_num = %u, PO_lit = %u, mem_sz = %u, n_ops = %u\n", ges->PI_num, ges->PO_lit, ges->mem_sz, ges->n_ops);
+    printf("c [gpu] r_bits = %u, r_max = %llu\n", r_bits, r_max);
+
+    fflush(stdout);
+
+    int glob_res = 0;
+
+    for (unsigned long long r = 0; r < r_max; r++)
+    {
+        if (glob_res == 10)
+            break;
+            
+        unsigned long long i, k;
+        operation *op;
+        bvec_t *local_mems;
+        local_mems = (bvec_t *)malloc(ges->mem_sz * sizeof(bvec_t));
+
+        local_mems[0] = 0ull;
+        local_mems[1] = ~0ull;
+        i = 2;
+
+        for (i = 0; i < bv_bits; i++)
+            local_mems[i + 2] = festivals[i];
+
+        for (i = bv_bits; i < ges->PI_num; i++)
+        {
+            k = (r >> (i - bv_bits)) & 1ull;
+            if (k == 1)
+                local_mems[i] = ~0ull;
+            else
+                local_mems[i] = 0ull;
+        }
+
+        // start to simulation
+        for (i = 0; i < ges->n_ops; i++)
+        {
+            op = &ges->ops[i];
+
+            if (op->type == OP_AND)
+                local_mems[op->addr1] = local_mems[op->addr2] & local_mems[op->addr3];
+            else if (op->type == OP_XOR)
+                local_mems[op->addr1] = local_mems[op->addr2] ^ local_mems[op->addr3];
+            else if (op->type == OP_NOT)
+                local_mems[op->addr1] = ~local_mems[op->addr2];
+        }
+
+        if (local_mems[ges->PO_lit] != 0u)
+            glob_res = 10;
+
+        free(local_mems);
+    }
+
+    if (glob_res == 10)
+        return 10;
+    else
+        return 20;
 }
