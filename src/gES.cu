@@ -5,69 +5,7 @@
 #include <cstdio>
 #include <cmath>
 
-// CUDA kernel: parallel simulation execution
-__global__ void simulation_kernel(
-    operation *ops,       // operation array
-    unsigned n_ops,       // number of operations
-    unsigned mem_sz,      // memory size
-    unsigned PO_lit,      // output position
-    unsigned long long r, // current round
-    unsigned bv_bits,     // bit vector bits
-    unsigned PI_num,      // number of inputs
-    bvec_t *festivals,    // fixed input patterns
-    int *results          // result array
-)
-{
-    // Calculate the round processed by current thread
-    unsigned long long thread_r = blockIdx.x * blockDim.x + threadIdx.x;
 
-    // Allocate local memory - each thread gets its own portion of shared memory
-    extern __shared__ bvec_t shared_mem[];
-    bvec_t *local_mems = &shared_mem[threadIdx.x * mem_sz];
-
-    // Initialize constants
-    local_mems[0] = 0ull;  // const0
-    local_mems[1] = ~0ull; // const1
-
-    // Set fixed input patterns
-    for (unsigned i = 0; i < bv_bits; i++)
-    {
-        local_mems[i + 2] = festivals[i];
-    }
-
-    // Set other inputs based on round
-    for (unsigned i = bv_bits; i < PI_num; i++)
-    {
-        unsigned long long k = (r >> (i - bv_bits)) & 1ull;
-        if (k == 1)
-            local_mems[i] = ~0ull;
-        else
-            local_mems[i] = 0ull;
-    }
-
-    // Execute simulation operations
-    for (unsigned i = 0; i < n_ops; i++)
-    {
-        operation op = ops[i];
-
-        if (op.type == OP_AND)
-            local_mems[op.addr1] = local_mems[op.addr2] & local_mems[op.addr3];
-        else if (op.type == OP_XOR)
-            local_mems[op.addr1] = local_mems[op.addr2] ^ local_mems[op.addr3];
-        else if (op.type == OP_NOT)
-            local_mems[op.addr1] = ~local_mems[op.addr2];
-    }
-
-    // Check result
-    if (local_mems[PO_lit] != 0u)
-    {
-        results[threadIdx.x] = 10; // SAT
-    }
-    else
-    {
-        results[threadIdx.x] = 20; // UNS
-    }
-}
 
 // Batch processing kernel: handle multiple rounds
 __global__ void batch_simulation_kernel(
@@ -93,6 +31,12 @@ __global__ void batch_simulation_kernel(
     // Allocate local memory - each thread gets its own portion of shared memory
     extern __shared__ bvec_t shared_mem[];
     bvec_t *local_mems = &shared_mem[threadIdx.x * mem_sz];
+
+    // Initialize all memory to zero first
+    for (unsigned i = 0; i < mem_sz; i++)
+    {
+        local_mems[i] = 0ull;
+    }
 
     // Initialize constants
     local_mems[0] = 0ull;  // const0
@@ -391,6 +335,9 @@ int gpu_run(glob_ES *ges)
 
     fflush(stdout);
 
+    // Define fixed input patterns (festivals)
+    bvec_t festivals[6] = {0ull, ~0ull, 0ull, ~0ull, 0ull, ~0ull}; // Fixed patterns for first 6 inputs
+
     // Todo:: If rounds are too few, use CPU version
 
     // Get GPU device properties and configure parameters
@@ -418,7 +365,7 @@ int gpu_run(glob_ES *ges)
 
     cudaMalloc(&d_ops, ges->n_ops * sizeof(operation));
     cudaMalloc(&d_festivals, 6 * sizeof(bvec_t));
-    cudaMalloc(&d_results, gpuConfig.threadsPerBlock * sizeof(int));
+    cudaMalloc(&d_results, gpuConfig.maxBatchSize * sizeof(int));
 
     // Copy data to device
     cudaMemcpy(d_ops, ges->ops, ges->n_ops * sizeof(operation), cudaMemcpyHostToDevice);
