@@ -318,19 +318,24 @@ void free_gpu(glob_ES *ges)
         free(ges);
 }
 
-int gpu_run(glob_ES *ges)
+int gpu_run(glob_ES *ges, int verbose)
 {
-    show_gpu_info();
-    fflush(stdout);
+    if (verbose > 1)
+    {
+        show_gpu_info();
+        fflush(stdout);
+    }
 
     const unsigned bv_bits = 6;
     unsigned r_bits = (ges->PI_num > bv_bits) ? (ges->PI_num - bv_bits) : 0;
     unsigned long long r_max = 1ULL << r_bits;
 
-    printf("c [gpu] PI_num = %u, PO_lit = %u, mem_sz = %u, n_ops = %u\n", ges->PI_num, ges->PO_lit, ges->mem_sz, ges->n_ops);
-    printf("c [gpu] r_bits = %u, r_max = %llu\n", r_bits, r_max);
-
-    fflush(stdout);
+    if (verbose > 1)
+    {
+        printf("c [gpu] PI_num = %u, PO_lit = %u, mem_sz = %u, n_ops = %u\n", ges->PI_num, ges->PO_lit, ges->mem_sz, ges->n_ops);
+        printf("c [gpu] r_bits = %u, r_max = %llu\n", r_bits, r_max);
+        fflush(stdout);
+    }
     bvec_t festivals[6] = {
         0xAAAAAAAAAAAAAAAA,
         0xCCCCCCCCCCCCCCCC,
@@ -338,7 +343,7 @@ int gpu_run(glob_ES *ges)
         0xFF00FF00FF00FF00,
         0xFFFF0000FFFF0000,
         0xFFFFFFFF00000000};
-    
+
     // Todo:: If rounds are too few, use CPU version
 
     GPUConfig gpuConfig = configure_gpu_parameters(ges->mem_sz);
@@ -346,7 +351,7 @@ int gpu_run(glob_ES *ges)
     // Check if GPU configuration is valid
     if (!gpuConfig.isValid)
     {
-        printf("c [gpu] GPU configuration failed, you should back to use CPU version\n");
+        printf("c ERROR: [gpu] GPU configuration failed, you should back to use CPU version\n");
         return 0; // fallback to CPU version
     }
 
@@ -369,9 +374,12 @@ int gpu_run(glob_ES *ges)
     const unsigned long long batch_size = gpuConfig.maxBatchSize; // Use the calculated reasonable batch size
     const unsigned long long num_batches = (r_max + batch_size - 1) / batch_size;
 
-    printf("c [gpu] Processing %llu rounds in %llu batches of %llu each\n",
-           r_max, num_batches, batch_size);
-    fflush(stdout);
+    if (verbose > 1)
+    {
+        printf("c [gpu] Processing %llu rounds in %llu batches of %llu each\n",
+               r_max, num_batches, batch_size);
+        fflush(stdout);
+    }
 
     for (unsigned long long batch = 0; batch < num_batches && glob_res != 10; batch++)
     {
@@ -412,7 +420,7 @@ int gpu_run(glob_ES *ges)
 
         free(h_results);
 
-        if (batch % 100 == 0)
+        if (verbose > 0 && batch % 100 == 0)
         {
             printf("c [gpu] Progress: %6.2f%% (%llu/%llu batches)\n",
                    (double)batch / num_batches * 100, batch, num_batches);
