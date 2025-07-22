@@ -5,8 +5,6 @@
 #include <cstdio>
 #include <cmath>
 
-
-
 // Batch processing kernel: handle multiple rounds
 __global__ void batch_simulation_kernel(
     operation *ops,               // operation array
@@ -83,15 +81,16 @@ __global__ void batch_simulation_kernel(
 }
 
 // GPU configuration structure
-struct GPUConfig {
+struct GPUConfig
+{
     unsigned threadsPerBlock;
     unsigned maxBlocksPerGrid;
     unsigned long long maxConcurrentThreads;
     unsigned long long maxBatchSize;
     unsigned sharedMemSize;
     bool isValid;
-    
-    GPUConfig() : threadsPerBlock(0), maxBlocksPerGrid(0), maxConcurrentThreads(0), 
+
+    GPUConfig() : threadsPerBlock(0), maxBlocksPerGrid(0), maxConcurrentThreads(0),
                   maxBatchSize(0), sharedMemSize(0), isValid(false) {}
 };
 
@@ -104,21 +103,24 @@ unsigned calculate_optimal_threads_per_block(const cudaDeviceProp &prop, unsigne
     if (prop.major >= 8)
     { // Ampere, Ada, Hopper
         optimal_threads = 512;
-        if (prop.multiProcessorCount >= 80) { // High-end GPUs
+        if (prop.multiProcessorCount >= 80)
+        { // High-end GPUs
             optimal_threads = 1024;
         }
     }
     else if (prop.major >= 7)
     { // Volta, Turing
         optimal_threads = 512;
-        if (prop.multiProcessorCount >= 60) { // High-end GPUs
+        if (prop.multiProcessorCount >= 60)
+        { // High-end GPUs
             optimal_threads = 1024;
         }
     }
     else if (prop.major >= 6)
     { // Pascal
         optimal_threads = 256;
-        if (prop.multiProcessorCount >= 20) { // High-end GPUs
+        if (prop.multiProcessorCount >= 20)
+        { // High-end GPUs
             optimal_threads = 512;
         }
     }
@@ -159,111 +161,106 @@ unsigned calculate_optimal_threads_per_block(const cudaDeviceProp &prop, unsigne
     return optimal_threads;
 }
 
-// Function to configure GPU parameters
-GPUConfig configure_gpu_parameters(const cudaDeviceProp &prop, unsigned mem_sz) {
+// Function to validate GPU configuration
+bool validate_gpu_config(const GPUConfig &config, const cudaDeviceProp &prop)
+{
+    bool valid = true;
+
+    // Check thread block size
+    if (config.threadsPerBlock < 32 || config.threadsPerBlock > prop.maxThreadsPerBlock)
+    {
+        printf("c [gpu] WARNING: Threads per block (%u) is outside valid range [32, %u]\n",
+               config.threadsPerBlock, prop.maxThreadsPerBlock);
+        valid = false;
+    }
+
+    // Check if threads per block is warp-aligned
+    if (config.threadsPerBlock % 32 != 0)
+    {
+        printf("c [gpu] WARNING: Threads per block (%u) is not warp-aligned\n", config.threadsPerBlock);
+        valid = false;
+    }
+
+    // Check shared memory usage
+    if (config.sharedMemSize > prop.sharedMemPerBlock)
+    {
+        printf("c [gpu] ERROR: Shared memory usage (%u) exceeds limit (%lu)\n",
+               config.sharedMemSize, prop.sharedMemPerBlock);
+        valid = false;
+    }
+
+    // Check batch size efficiency
+    if (config.maxBatchSize < 1000)
+    {
+        printf("c [gpu] WARNING: Batch size (%llu) is very small, may be inefficient\n", config.maxBatchSize);
+    }
+
+    return valid;
+}
+
+GPUConfig configure_gpu_parameters(unsigned mem_sz)
+{
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, 0); // use the first GPU
+
     GPUConfig config;
-    
-    // Calculate shared memory requirements per block (each thread needs its own memory space)
+
     unsigned sharedMemPerThread = mem_sz * sizeof(bvec_t);
-    config.sharedMemSize = sharedMemPerThread; // This will be multiplied by threads per block
-    
-    // Calculate optimal thread block size based on compute capability and shared memory
     config.threadsPerBlock = calculate_optimal_threads_per_block(prop, sharedMemPerThread);
-    
-    // Now calculate total shared memory needed for the block
     config.sharedMemSize = config.threadsPerBlock * sharedMemPerThread;
-    
-    // Check shared memory limit
-    if (config.sharedMemSize > prop.sharedMemPerBlock) {
+
+    if (config.sharedMemSize > prop.sharedMemPerBlock)
+    {
         printf("c [gpu] ERROR: Required shared memory (%u bytes) exceeds limit (%lu bytes)\n",
                config.sharedMemSize, prop.sharedMemPerBlock);
-        printf("c [gpu] - Each thread needs %u bytes, block has %u threads\n", 
+        printf("c [gpu] - Each thread needs %u bytes, block has %u threads\n",
                sharedMemPerThread, config.threadsPerBlock);
         config.isValid = false;
         return config;
     }
-    
-    // Calculate reasonable batch size based on GPU capabilities
-    // Consider both compute capability and memory constraints
+
     unsigned maxBlocksByCompute = prop.multiProcessorCount * 32; // 32 blocks per SM is a good starting point
     unsigned maxBlocksByGrid = (prop.maxGridSize[0] < 65536u) ? prop.maxGridSize[0] : 65536u;
     config.maxBlocksPerGrid = (maxBlocksByCompute < maxBlocksByGrid) ? maxBlocksByCompute : maxBlocksByGrid;
-    
+
     config.maxConcurrentThreads = config.threadsPerBlock * config.maxBlocksPerGrid;
-    
+
     // Calculate optimal batch size based on GPU architecture
     unsigned long long optimalBatchSize;
-    if (prop.major >= 8) {  // Ampere, Ada, Hopper
+    if (prop.major >= 8)
+    {                                  // Ampere, Ada, Hopper
         optimalBatchSize = 5000000ull; // 5M threads for modern GPUs
-    } else if (prop.major >= 7) {  // Volta, Turing
+    }
+    else if (prop.major >= 7)
+    {                                  // Volta, Turing
         optimalBatchSize = 3000000ull; // 3M threads
-    } else if (prop.major >= 6) {  // Pascal
+    }
+    else if (prop.major >= 6)
+    {                                  // Pascal
         optimalBatchSize = 2000000ull; // 2M threads
-    } else {  // Maxwell and older
+    }
+    else
+    {                                  // Maxwell and older
         optimalBatchSize = 1000000ull; // 1M threads
     }
-    
+
     // Ensure batch size is reasonable and doesn't exceed concurrent threads
-    config.maxBatchSize = (config.maxConcurrentThreads < optimalBatchSize) ? 
-                          config.maxConcurrentThreads : optimalBatchSize;
-    
+    config.maxBatchSize = (config.maxConcurrentThreads < optimalBatchSize) ? config.maxConcurrentThreads : optimalBatchSize;
+
     // Ensure minimum batch size for efficiency
-    if (config.maxBatchSize < 10000ull) {
+    if (config.maxBatchSize < 10000ull)
+    {
         config.maxBatchSize = 10000ull; // At least 10K threads per batch
     }
-    
+
     config.isValid = true;
+
+    if (!validate_gpu_config(config, prop))
+    {
+        printf("c [gpu] GPU configuration double check failed\n");
+    }
+
     return config;
-}
-
-// Function to validate GPU configuration
-bool validate_gpu_config(const GPUConfig &config, const cudaDeviceProp &prop) {
-    bool valid = true;
-    
-    // Check thread block size
-    if (config.threadsPerBlock < 32 || config.threadsPerBlock > prop.maxThreadsPerBlock) {
-        printf("c [gpu] WARNING: Threads per block (%u) is outside valid range [32, %u]\n", 
-               config.threadsPerBlock, prop.maxThreadsPerBlock);
-        valid = false;
-    }
-    
-    // Check if threads per block is warp-aligned
-    if (config.threadsPerBlock % 32 != 0) {
-        printf("c [gpu] WARNING: Threads per block (%u) is not warp-aligned\n", config.threadsPerBlock);
-        valid = false;
-    }
-    
-    // Check shared memory usage
-    if (config.sharedMemSize > prop.sharedMemPerBlock) {
-        printf("c [gpu] ERROR: Shared memory usage (%u) exceeds limit (%lu)\n", 
-               config.sharedMemSize, prop.sharedMemPerBlock);
-        valid = false;
-    }
-    
-    // Check batch size efficiency
-    if (config.maxBatchSize < 1000) {
-        printf("c [gpu] WARNING: Batch size (%llu) is very small, may be inefficient\n", config.maxBatchSize);
-    }
-    
-    return valid;
-}
-
-// Function to print GPU configuration details
-void print_gpu_config(const GPUConfig &config, const cudaDeviceProp &prop) {
-    printf("c [gpu] GPU Configuration Summary:\n");
-    printf("c [gpu] - Threads per block: %u (max: %u)\n", config.threadsPerBlock, prop.maxThreadsPerBlock);
-    printf("c [gpu] - Max blocks per grid: %u (max: %u)\n", config.maxBlocksPerGrid, prop.maxGridSize[0]);
-    printf("c [gpu] - Max concurrent threads: %llu\n", config.maxConcurrentThreads);
-    printf("c [gpu] - Max batch size: %llu\n", config.maxBatchSize);
-    printf("c [gpu] - Shared memory per block: %u bytes (limit: %lu bytes)\n", 
-           config.sharedMemSize, prop.sharedMemPerBlock);
-    printf("c [gpu] - Shared memory per thread: %u bytes\n", config.sharedMemSize / config.threadsPerBlock);
-    
-    // Print efficiency metrics
-    double sharedMemUtilization = (double)config.sharedMemSize / prop.sharedMemPerBlock * 100;
-    double threadUtilization = (double)config.threadsPerBlock / prop.maxThreadsPerBlock * 100;
-    printf("c [gpu] - Shared memory utilization: %.1f%%\n", sharedMemUtilization);
-    printf("c [gpu] - Thread block utilization: %.1f%%\n", threadUtilization);
 }
 
 bool shown = false;
@@ -328,35 +325,30 @@ int gpu_run(glob_ES *ges)
 
     const unsigned bv_bits = 6;
     unsigned r_bits = (ges->PI_num > bv_bits) ? (ges->PI_num - bv_bits) : 0;
-    unsigned long long r_max = 1 << r_bits;
+    unsigned long long r_max = 1ULL << r_bits;
 
     printf("c [gpu] PI_num = %u, PO_lit = %u, mem_sz = %u, n_ops = %u\n", ges->PI_num, ges->PO_lit, ges->mem_sz, ges->n_ops);
     printf("c [gpu] r_bits = %u, r_max = %llu\n", r_bits, r_max);
 
     fflush(stdout);
-
-    // Define fixed input patterns (festivals)
-    bvec_t festivals[6] = {0ull, ~0ull, 0ull, ~0ull, 0ull, ~0ull}; // Fixed patterns for first 6 inputs
-
+    bvec_t festivals[6] = {
+        0xAAAAAAAAAAAAAAAA,
+        0xCCCCCCCCCCCCCCCC,
+        0xF0F0F0F0F0F0F0F0,
+        0xFF00FF00FF00FF00,
+        0xFFFF0000FFFF0000,
+        0xFFFFFFFF00000000};
+    
     // Todo:: If rounds are too few, use CPU version
 
-    // Get GPU device properties and configure parameters
-    cudaDeviceProp prop;
-    cudaGetDeviceProperties(&prop, 0); // use the first GPU
-    
-    GPUConfig gpuConfig = configure_gpu_parameters(prop, ges->mem_sz);
-    
+    GPUConfig gpuConfig = configure_gpu_parameters(ges->mem_sz);
+
     // Check if GPU configuration is valid
-    if (!gpuConfig.isValid) {
+    if (!gpuConfig.isValid)
+    {
         printf("c [gpu] GPU configuration failed, you should back to use CPU version\n");
         return 0; // fallback to CPU version
     }
-    
-    // Validate and print GPU configuration information
-    if (!validate_gpu_config(gpuConfig, prop)) {
-        printf("c [gpu] GPU configuration validation failed\n");
-    }
-    print_gpu_config(gpuConfig, prop);
 
     // Allocate device memory
     operation *d_ops;
@@ -379,6 +371,7 @@ int gpu_run(glob_ES *ges)
 
     printf("c [gpu] Processing %llu rounds in %llu batches of %llu each\n",
            r_max, num_batches, batch_size);
+    fflush(stdout);
 
     for (unsigned long long batch = 0; batch < num_batches && glob_res != 10; batch++)
     {
@@ -423,6 +416,7 @@ int gpu_run(glob_ES *ges)
         {
             printf("c [gpu] Progress: %6.2f%% (%llu/%llu batches)\n",
                    (double)batch / num_batches * 100, batch, num_batches);
+            fflush(stdout);
         }
     }
 
