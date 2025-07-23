@@ -37,3 +37,16 @@ fi
 
 # backup: 
 # 
+
+
+# for i in {2..5}; do 
+#     ./build/bin/fastLEC -i ../ins/miter_right/bit${i}/mul${i}o${i}.aig -m gpuES -c 1 -v 2 |gnomon  > log/mul${i}o${i}.log
+# done
+
+# for i in {6..9}; do 
+#     ./build/bin/fastLEC -i ../ins/miter_right/bit${i}/mul${i}o0${i}.aig -m gpuES -c 1 -v 2 |gnomon  > log/mul${i}o0${i}.log
+# done
+
+# for i in {10..20}; do 
+#     ./build/bin/fastLEC -i ../ins/miter_right/bit${i}/mul${i}o${i}.aig -m gpuES -c 1 -v 2 |gnomon  > log/mul${i}o${i}.log
+# done
