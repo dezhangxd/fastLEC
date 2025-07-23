@@ -354,7 +354,10 @@ int fastLEC::ISimulator::run_ies()
     mem_cost += sizeof(operation *);
 
     if (Param::get().verbose > 0)
+    {
         printf("c [iES] Each Thread mems_cost: %d bytes\n", mem_cost);
+        fflush(stdout);
+    }
     unsigned es_bits = BVEC_BIT_WIDTH;
     unsigned long long round_num = 0;
     if (glob_es.PI_num >= es_bits)
@@ -365,8 +368,10 @@ int fastLEC::ISimulator::run_ies()
     for (unsigned long long r = 0; r < round_num; r++)
     {
         int res = 0;
-        if (Param::get().verbose > 1 && r % 100000 == 0)
+        if (Param::get().verbose > 1 && r % 100000 == 0){
             printf("c [iES] %6.2f%% : round %lld / %llu \n", (double)r / round_num * 100, r, round_num);
+            fflush(stdout);
+        }
         res = run_ies_round(r);
         if (res == 10)
             return 10;
@@ -401,9 +406,10 @@ ret_vals fastLEC::Simulator::run_ies()
         unsigned long long round = 0;
         for (; round < round_num; round++)
         {
-            if (Param::get().verbose > 1 && round % 100000 == 0)
+            if (Param::get().verbose > 1 && round % 100000 == 0){
                 printf("c [iES] %6.2f%% : round %lld / %llu \n", (double)round / round_num * 100, round, round_num);
-            fflush(stdout);
+                fflush(stdout);
+            }
 
             loc_mem[0].reset();
             loc_mem[1].set();
@@ -597,9 +603,10 @@ fastLEC::ret_vals fastLEC::Simulator::run_pbits_pes(unsigned n_t)
         unsigned long long round = 0;
         for (; round < round_num; round++)
         {
-            if (Param::get().verbose > 1 && round % 100000 == 0)
+            if (Param::get().verbose > 1 && round % 100000 == 0){
                 printf("c [iES] %6.2f%% : round %lld / %llu \n", (double)round / round_num * 100, round, round_num);
-            fflush(stdout);
+                fflush(stdout);
+            }
             loc_mem[0].reset();
             loc_mem[1].set();
 
@@ -702,9 +709,10 @@ fastLEC::ret_vals fastLEC::Simulator::run_round_pes(unsigned n_t)
 
         for (unsigned long long round = start_round; round < end_round; round++)
         {
-            if (Param::get().verbose > 1 && round % 100000 == 0)
+            if (Param::get().verbose > 1 && round % 100000 == 0){
                 printf("c [iES] %6.2f%% : round %lld / %llu \n", (double)round / (end_round - start_round) * 100, round, end_round - start_round);
-            fflush(stdout);
+                fflush(stdout);
+            }
             loc_mem[0].reset();
             loc_mem[1].set();
 
