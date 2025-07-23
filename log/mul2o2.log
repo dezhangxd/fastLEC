@@ -1,0 +1,30 @@
+   0.0027s   c ------------------------------------------------------------
+   0.0005s   c fastLEC v1.0
+   0.0001s   c Author: Xindi Zhang
+   0.0000s   c Email: dezhangxd96@gmail.com
+   0.0000s   c ------------------------------------------------------------
+   0.0000s   c [parser] input file: ../ins/miter_right/bit2/mul2o2.aig
+   0.0000s   c [parser] mode: gpuES
+   0.0000s   c [parser] threads: 1
+   0.0000s   c [parser] timeout: 3600.00 seconds
+   0.0000s   c [parser] verbose: 2
+   0.0000s   c ------------------------------------------------------------
+   0.0000s   c [Prover] Start to parsing AIGER file: ../ins/miter_right/bit2/mul2o2.aig
+   0.0000s   c [AIG] successfully load AIGER file with MILOA: 40 4 0 1 36
+   0.0000s   c [Prover] read AIGER file in 0.000034 seconds
+   0.0000s   c [CEC] Starting CEC check...
+   0.0000s   c [gpu] Detected 1 CUDA device(s):
+   0.0000s   c [gpu] Device 0: NVIDIA GeForce RTX 4090
+   0.0000s   c [gpu] - Compute Cap.: 8.9, Glob. Mem.: 23.64 GB, Multipro. Cnt: 128
+   0.0000s   c [gpu] - Max Threads/Block: 1024, Max Grid Size: [2^30, 2^15, 2^15]
+   0.0000s   c [gpu] - Shared Mem. /Block: 48.00 KB, Warp Size: 32
+   0.0000s   c [gpu] PI_num = 4, PO_lit = 1, mem_sz = 6, n_ops = 13
+   0.0000s   c [gpu] r_bits = 0, r_max = 1
+   0.0000s   c [gpu] Processing 1 rounds in 1 batches of 4194304 each
+   0.0000s   c [gpu] Progress:   0.00% (0/1 batches)
+   0.0000s   c [gpuES] result = 20 [time = 0.09]
+   0.0000s   c [CEC] CEC check completed in 0.087512 seconds
+   0.0000s   s Equivalent.
+   0.0008s   c Runtime: 0.0875848 seconds
+             
+     Total   0.0050s

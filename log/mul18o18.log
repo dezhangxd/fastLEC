@@ -1,0 +1,111 @@
+   0.0027s   c ------------------------------------------------------------
+   0.0006s   c fastLEC v1.0
+   0.0001s   c Author: Xindi Zhang
+   0.0000s   c Email: dezhangxd96@gmail.com
+   0.0000s   c ------------------------------------------------------------
+   0.0000s   c [parser] input file: ../ins/miter_right/bit18/mul18o18.aig
+   0.0000s   c [parser] mode: gpuES
+   0.0000s   c [parser] threads: 1
+   0.0000s   c [parser] timeout: 3600.00 seconds
+   0.0000s   c [parser] verbose: 2
+   0.0000s   c ------------------------------------------------------------
+   0.0000s   c [Prover] Start to parsing AIGER file: ../ins/miter_right/bit18/mul18o18.aig
+   0.0000s   c [AIG] successfully load AIGER file with MILOA: 8819 36 0 1 8783
+   0.0000s   c [Prover] read AIGER file in 0.000862 seconds
+   0.0000s   c [CEC] Starting CEC check...
+   0.0000s   c [gpu] Detected 1 CUDA device(s):
+   0.0000s   c [gpu] Device 0: NVIDIA GeForce RTX 4090
+   0.0000s   c [gpu] - Compute Cap.: 8.9, Glob. Mem.: 23.64 GB, Multipro. Cnt: 128
+   0.0000s   c [gpu] - Max Threads/Block: 1024, Max Grid Size: [2^30, 2^15, 2^15]
+   0.0000s   c [gpu] - Shared Mem. /Block: 48.00 KB, Warp Size: 32
+   0.0000s   c [gpu] PI_num = 36, PO_lit = 98, mem_sz = 171, n_ops = 3860
+   0.0000s   c [gpu] r_bits = 30, r_max = 1073741824
+   0.0000s   c [gpu] Processing 1073741824 rounds in 8192 batches of 131072 each
+   0.5349s   c [gpu] Progress:   0.00% (0/8192 batches)
+   0.5732s   c [gpu] Progress:   1.22% (100/8192 batches)
+   0.5737s   c [gpu] Progress:   2.44% (200/8192 batches)
+   0.5729s   c [gpu] Progress:   3.66% (300/8192 batches)
+   0.5728s   c [gpu] Progress:   4.88% (400/8192 batches)
+   0.5730s   c [gpu] Progress:   6.10% (500/8192 batches)
+   0.5729s   c [gpu] Progress:   7.32% (600/8192 batches)
+   0.5728s   c [gpu] Progress:   8.54% (700/8192 batches)
+   0.5730s   c [gpu] Progress:   9.77% (800/8192 batches)
+   0.5730s   c [gpu] Progress:  10.99% (900/8192 batches)
+   0.5728s   c [gpu] Progress:  12.21% (1000/8192 batches)
+   0.5730s   c [gpu] Progress:  13.43% (1100/8192 batches)
+   0.5729s   c [gpu] Progress:  14.65% (1200/8192 batches)
+   0.5729s   c [gpu] Progress:  15.87% (1300/8192 batches)
+   0.5728s   c [gpu] Progress:  17.09% (1400/8192 batches)
+   0.5730s   c [gpu] Progress:  18.31% (1500/8192 batches)
+   0.5729s   c [gpu] Progress:  19.53% (1600/8192 batches)
+   0.5728s   c [gpu] Progress:  20.75% (1700/8192 batches)
+   0.5765s   c [gpu] Progress:  21.97% (1800/8192 batches)
+   0.5728s   c [gpu] Progress:  23.19% (1900/8192 batches)
+   0.5727s   c [gpu] Progress:  24.41% (2000/8192 batches)
+   0.5729s   c [gpu] Progress:  25.63% (2100/8192 batches)
+   0.5728s   c [gpu] Progress:  26.86% (2200/8192 batches)
+   0.5729s   c [gpu] Progress:  28.08% (2300/8192 batches)
+   0.5729s   c [gpu] Progress:  29.30% (2400/8192 batches)
+   0.5732s   c [gpu] Progress:  30.52% (2500/8192 batches)
+   0.5739s   c [gpu] Progress:  31.74% (2600/8192 batches)
+   0.5730s   c [gpu] Progress:  32.96% (2700/8192 batches)
+   0.5729s   c [gpu] Progress:  34.18% (2800/8192 batches)
+   0.5731s   c [gpu] Progress:  35.40% (2900/8192 batches)
+   0.5726s   c [gpu] Progress:  36.62% (3000/8192 batches)
+   0.5727s   c [gpu] Progress:  37.84% (3100/8192 batches)
+   0.5727s   c [gpu] Progress:  39.06% (3200/8192 batches)
+   0.5725s   c [gpu] Progress:  40.28% (3300/8192 batches)
+   0.5726s   c [gpu] Progress:  41.50% (3400/8192 batches)
+   0.5728s   c [gpu] Progress:  42.72% (3500/8192 batches)
+   0.5728s   c [gpu] Progress:  43.95% (3600/8192 batches)
+   0.5728s   c [gpu] Progress:  45.17% (3700/8192 batches)
+   0.5730s   c [gpu] Progress:  46.39% (3800/8192 batches)
+   0.5735s   c [gpu] Progress:  47.61% (3900/8192 batches)
+   0.5728s   c [gpu] Progress:  48.83% (4000/8192 batches)
+   0.5731s   c [gpu] Progress:  50.05% (4100/8192 batches)
+   0.5728s   c [gpu] Progress:  51.27% (4200/8192 batches)
+   0.5729s   c [gpu] Progress:  52.49% (4300/8192 batches)
+   0.5732s   c [gpu] Progress:  53.71% (4400/8192 batches)
+   0.5729s   c [gpu] Progress:  54.93% (4500/8192 batches)
+   0.5729s   c [gpu] Progress:  56.15% (4600/8192 batches)
+   0.5730s   c [gpu] Progress:  57.37% (4700/8192 batches)
+   0.5729s   c [gpu] Progress:  58.59% (4800/8192 batches)
+   0.5729s   c [gpu] Progress:  59.81% (4900/8192 batches)
+   0.5779s   c [gpu] Progress:  61.04% (5000/8192 batches)
+   0.5731s   c [gpu] Progress:  62.26% (5100/8192 batches)
+   0.5728s   c [gpu] Progress:  63.48% (5200/8192 batches)
+   0.5758s   c [gpu] Progress:  64.70% (5300/8192 batches)
+   0.5727s   c [gpu] Progress:  65.92% (5400/8192 batches)
+   0.5728s   c [gpu] Progress:  67.14% (5500/8192 batches)
+   0.5727s   c [gpu] Progress:  68.36% (5600/8192 batches)
+   0.5766s   c [gpu] Progress:  69.58% (5700/8192 batches)
+   0.5752s   c [gpu] Progress:  70.80% (5800/8192 batches)
+   0.5727s   c [gpu] Progress:  72.02% (5900/8192 batches)
+   0.5727s   c [gpu] Progress:  73.24% (6000/8192 batches)
+   0.5732s   c [gpu] Progress:  74.46% (6100/8192 batches)
+   0.5737s   c [gpu] Progress:  75.68% (6200/8192 batches)
+   0.5736s   c [gpu] Progress:  76.90% (6300/8192 batches)
+   0.5736s   c [gpu] Progress:  78.12% (6400/8192 batches)
+   0.5737s   c [gpu] Progress:  79.35% (6500/8192 batches)
+   0.5763s   c [gpu] Progress:  80.57% (6600/8192 batches)
+   0.5729s   c [gpu] Progress:  81.79% (6700/8192 batches)
+   0.5729s   c [gpu] Progress:  83.01% (6800/8192 batches)
+   0.5728s   c [gpu] Progress:  84.23% (6900/8192 batches)
+   0.5729s   c [gpu] Progress:  85.45% (7000/8192 batches)
+   0.5727s   c [gpu] Progress:  86.67% (7100/8192 batches)
+   0.5728s   c [gpu] Progress:  87.89% (7200/8192 batches)
+   0.5729s   c [gpu] Progress:  89.11% (7300/8192 batches)
+   0.5728s   c [gpu] Progress:  90.33% (7400/8192 batches)
+   0.5728s   c [gpu] Progress:  91.55% (7500/8192 batches)
+   0.5729s   c [gpu] Progress:  92.77% (7600/8192 batches)
+   0.5728s   c [gpu] Progress:  93.99% (7700/8192 batches)
+   0.5727s   c [gpu] Progress:  95.21% (7800/8192 batches)
+   0.5773s   c [gpu] Progress:  96.44% (7900/8192 batches)
+   0.5743s   c [gpu] Progress:  97.66% (8000/8192 batches)
+   0.5220s   c [gpu] Progress:  98.88% (8100/8192 batches)
+   0.0001s   c [gpuES] result = 20 [time = 47.04]
+   0.0000s   c [CEC] CEC check completed in 47.042850 seconds
+   0.0000s   s Equivalent.
+   0.0104s   c Runtime: 47.0438 seconds
+             
+     Total   46.9337s

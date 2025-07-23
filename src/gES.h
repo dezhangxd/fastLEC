@@ -42,7 +42,7 @@ extern "C"
 
     glob_ES *gpu_init();
 
-    int gpu_run(glob_ES *ges, int verbose = 0);
+    int gpu_run(glob_ES *ges, int verbose);
 
     void free_gpu(glob_ES *ges);
 

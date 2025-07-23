@@ -1,33 +1,33 @@
 clear;
 clear;
 
+rm -rf build
+mkdir -p build
+cd build
 # check command for build with cuda 
 if [ "$1" = "no-cuda" ]; then
     echo "=== no cuda ==="
-    rm -rf build
-    mkdir -p build
-    cd build
     cmake -DUSE_CUDA=OFF ..
     make -j
-    cd ..
-    BUILD_DIR="build"
+elif [ "$1" = "cuda" ]; then
+    echo "=== cuda ==="
+    cmake -DUSE_CUDA=ON ..
+    make -j
 else
     echo "=== with cuda ==="
-    rm -rf build
-    mkdir -p build
-    cd build
     cmake ..
     make -j
-    cd ..
-    BUILD_DIR="build"
 fi
+cd ..
+BUILD_DIR="build"
 
-# clear
+
+
 
 # ./${BUILD_DIR}/bin/fastLEC -i /home/zhangxd/Experiment/EC/ins/dp2_pairs/test_11_TOP5_0.aiger -m ES -p use_ies 1
 # ./${BUILD_DIR}/bin/fastLEC -i ../ins/miter_error/bit12/miter12o12.aig -m pES -c 10 |gnomon
 # ./${BUILD_DIR}/bin/fastLEC -i ../ins/all/test_11_TOP5.aiger -m pES -c 1 |gnomon
-./${BUILD_DIR}/bin/fastLEC -i ../ins/miter_right/bit16/mul16o16.aig -m pES -c 128 -v 2 |gnomon
+./${BUILD_DIR}/bin/fastLEC -i ../ins/miter_right/bit16/mul16o16.aig -m pES -c 16 -v 2 |gnomon
 # ./${BUILD_DIR}/bin/fastLEC -i ../ins/miter_right/bit12/mul12o12.aig -m pES -c 1 -v 2 |gnomon
 # ./${BUILD_DIR}/bin/fastLEC -i ../ins/miter_error/bit12/miter12o12.aig -m gpuES -c 1 |gnomon
 # ./${BUILD_DIR}/bin/fastLEC -i /mnt/home/zhangxd/EC/ins/miter_error/bit12/miter12o12.aig -m ES -p use_ies 1

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(fastLEC VERSION 0.1.0 LANGUAGES C CXX)
+project(fastLEC VERSION 0.1.0 LANGUAGES C CXX CUDA)
 
 # Set CUDA policy to suppress warnings
 cmake_policy(SET CMP0104 NEW)
@@ -55,7 +55,17 @@ if(USE_CUDA)
     if(CUDAToolkit_FOUND)
         message(STATUS "CUDAToolkit found: ${CUDAToolkit_VERSION}")
         set(CUDA_ENABLED TRUE)
-        set(CUDA_LIBRARIES cuda cudart)
+        # Find CUDA libraries with proper paths
+        find_library(CUDA_LIBRARY cuda PATHS ${CUDAToolkit_LIBRARY_DIRS} NO_DEFAULT_PATH)
+        find_library(CUDART_LIBRARY cudart PATHS ${CUDAToolkit_LIBRARY_DIRS} NO_DEFAULT_PATH)
+        if(CUDA_LIBRARY AND CUDART_LIBRARY)
+            set(CUDA_LIBRARIES ${CUDA_LIBRARY} ${CUDART_LIBRARY})
+            message(STATUS "CUDA libraries found: ${CUDA_LIBRARIES}")
+        else()
+            # Fallback to library names
+            set(CUDA_LIBRARIES cuda cudart)
+            message(STATUS "Using fallback CUDA library names")
+        endif()
         set(CUDA_INCLUDE_DIRS ${CUDAToolkit_INCLUDE_DIRS})
     else()
         # Fallback to legacy CUDA finder
@@ -65,6 +75,10 @@ if(USE_CUDA)
             message(STATUS "CUDA include directories: ${CUDA_INCLUDE_DIRS}")
             message(STATUS "CUDA libraries: ${CUDA_LIBRARIES}")
             set(CUDA_ENABLED TRUE)
+            # Ensure CUDA libraries are properly set
+            if(NOT CUDA_LIBRARIES)
+                set(CUDA_LIBRARIES cuda cudart)
+            endif()
         else()
             message(WARNING "CUDA not found, disabling CUDA support")
             set(CUDA_ENABLED FALSE)
@@ -75,12 +89,69 @@ if(USE_CUDA)
         # Set CUDA architectures (only newer ones to avoid deprecation warnings)
         set(CMAKE_CUDA_ARCHITECTURES 75 80 86)
         
+        # Print CUDA environment information for debugging
+        message(STATUS "CUDA_HOME: $ENV{CUDA_HOME}")
+        message(STATUS "CUDA_PATH: $ENV{CUDA_PATH}")
+        message(STATUS "CUDAToolkit_LIBRARY_DIRS: ${CUDAToolkit_LIBRARY_DIRS}")
+        message(STATUS "CUDAToolkit_INCLUDE_DIRS: ${CUDAToolkit_INCLUDE_DIRS}")
+        
         # Set CUDA specific flags
         set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr")
         set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-extended-lambda")
         
         # Enable separable compilation
         set(CMAKE_CUDA_SEPARABLE_COMPILATION ON)
+        
+        # Additional CUDA library search paths
+        if(CUDAToolkit_FOUND)
+            list(APPEND CMAKE_LIBRARY_PATH ${CUDAToolkit_LIBRARY_DIRS})
+            # Add specific CUDA 12.4 paths
+            list(APPEND CMAKE_LIBRARY_PATH "/usr/local/cuda-12.4/targets/x86_64-linux/lib")
+        endif()
+        # Always add common CUDA library paths
+        list(APPEND CMAKE_LIBRARY_PATH "/usr/lib/x86_64-linux-gnu")
+        list(APPEND CMAKE_LIBRARY_PATH "/usr/local/cuda-12.4/targets/x86_64-linux/lib")
+        
+        # Try to find CUDA libraries in common locations
+        find_library(CUDA_LIBRARY cuda 
+            PATHS 
+            /usr/lib/x86_64-linux-gnu
+            /usr/local/cuda-12.4/targets/x86_64-linux/lib
+            /usr/local/cuda/lib64
+            /usr/local/cuda/lib
+            ${CUDAToolkit_LIBRARY_DIRS}
+            /opt/cuda/lib64
+            /opt/cuda/lib
+            NO_DEFAULT_PATH
+        )
+        find_library(CUDART_LIBRARY cudart
+            PATHS 
+            /usr/local/cuda-12.4/targets/x86_64-linux/lib
+            /usr/lib/x86_64-linux-gnu
+            /usr/local/cuda/lib64
+            /usr/local/cuda/lib
+            ${CUDAToolkit_LIBRARY_DIRS}
+            /opt/cuda/lib64
+            /opt/cuda/lib
+            NO_DEFAULT_PATH
+        )
+        
+        if(CUDA_LIBRARY AND CUDART_LIBRARY)
+            set(CUDA_LIBRARIES ${CUDA_LIBRARY} ${CUDART_LIBRARY})
+            message(STATUS "Found CUDA libraries: ${CUDA_LIBRARIES}")
+        else()
+            # If libraries not found, try to use pkg-config or system paths
+            message(STATUS "CUDA libraries not found in expected locations, trying system paths...")
+            find_library(CUDA_LIBRARY cuda)
+            find_library(CUDART_LIBRARY cudart)
+            if(CUDA_LIBRARY AND CUDART_LIBRARY)
+                set(CUDA_LIBRARIES ${CUDA_LIBRARY} ${CUDART_LIBRARY})
+                message(STATUS "Found CUDA libraries in system paths: ${CUDA_LIBRARIES}")
+            else()
+                message(WARNING "CUDA libraries not found anywhere, using library names")
+                set(CUDA_LIBRARIES cuda cudart)
+            endif()
+        endif()
     endif()
 else()
     set(CUDA_ENABLED FALSE)
@@ -411,6 +482,21 @@ if(EXISTING_SOURCES)
     if(CUDA_ENABLED)
         target_link_libraries(fastLEC PRIVATE ${CUDA_LIBRARIES})
         target_include_directories(fastLEC PRIVATE ${CUDA_INCLUDE_DIRS})
+        
+        # Add CUDA library directories to linker
+        if(CUDAToolkit_FOUND AND CUDAToolkit_LIBRARY_DIRS)
+            target_link_directories(fastLEC PRIVATE ${CUDAToolkit_LIBRARY_DIRS})
+            message(STATUS "Added CUDA library directories: ${CUDAToolkit_LIBRARY_DIRS}")
+        endif()
+        
+        # Add runtime library path
+        if(CUDAToolkit_FOUND AND CUDAToolkit_LIBRARY_DIRS)
+            set_target_properties(fastLEC PROPERTIES
+                BUILD_WITH_INSTALL_RPATH TRUE
+                INSTALL_RPATH "${CUDAToolkit_LIBRARY_DIRS}"
+            )
+        endif()
+        
         set_target_properties(fastLEC PROPERTIES
             CUDA_SEPARABLE_COMPILATION ON
         )
@@ -479,6 +565,12 @@ if(BUILD_LIBRARY AND EXISTING_SOURCES)
     if(CUDA_ENABLED)
         target_link_libraries(fastLEC_lib PUBLIC ${CUDA_LIBRARIES})
         target_include_directories(fastLEC_lib PUBLIC ${CUDA_INCLUDE_DIRS})
+        
+        # Add CUDA library directories to linker
+        if(CUDAToolkit_FOUND AND CUDAToolkit_LIBRARY_DIRS)
+            target_link_directories(fastLEC_lib PUBLIC ${CUDAToolkit_LIBRARY_DIRS})
+        endif()
+        
         set_target_properties(fastLEC_lib PROPERTIES
             CUDA_SEPARABLE_COMPILATION ON
         )

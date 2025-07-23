@@ -1,0 +1,50 @@
+   0.0027s   c ------------------------------------------------------------
+   0.0006s   c fastLEC v1.0
+   0.0001s   c Author: Xindi Zhang
+   0.0000s   c Email: dezhangxd96@gmail.com
+   0.0000s   c ------------------------------------------------------------
+   0.0000s   c [parser] input file: ../ins/miter_right/bit17/mul17o17.aig
+   0.0000s   c [parser] mode: gpuES
+   0.0000s   c [parser] threads: 1
+   0.0000s   c [parser] timeout: 3600.00 seconds
+   0.0000s   c [parser] verbose: 2
+   0.0000s   c ------------------------------------------------------------
+   0.0000s   c [Prover] Start to parsing AIGER file: ../ins/miter_right/bit17/mul17o17.aig
+   0.0000s   c [AIG] successfully load AIGER file with MILOA: 7807 34 0 1 7773
+   0.0000s   c [Prover] read AIGER file in 0.000489 seconds
+   0.0000s   c [CEC] Starting CEC check...
+   0.0000s   c [gpu] Detected 1 CUDA device(s):
+   0.0000s   c [gpu] Device 0: NVIDIA GeForce RTX 4090
+   0.0000s   c [gpu] - Compute Cap.: 8.9, Glob. Mem.: 23.64 GB, Multipro. Cnt: 128
+   0.0000s   c [gpu] - Max Threads/Block: 1024, Max Grid Size: [2^30, 2^15, 2^15]
+   0.0000s   c [gpu] - Shared Mem. /Block: 48.00 KB, Warp Size: 32
+   0.0000s   c [gpu] PI_num = 34, PO_lit = 116, mem_sz = 148, n_ops = 3407
+   0.0000s   c [gpu] r_bits = 28, r_max = 268435456
+   0.0000s   c [gpu] Processing 268435456 rounds in 2048 batches of 131072 each
+   0.4543s   c [gpu] Progress:   0.00% (0/2048 batches)
+   0.5221s   c [gpu] Progress:   4.88% (100/2048 batches)
+   0.5176s   c [gpu] Progress:   9.77% (200/2048 batches)
+   0.5174s   c [gpu] Progress:  14.65% (300/2048 batches)
+   0.5175s   c [gpu] Progress:  19.53% (400/2048 batches)
+   0.5175s   c [gpu] Progress:  24.41% (500/2048 batches)
+   0.5175s   c [gpu] Progress:  29.30% (600/2048 batches)
+   0.5174s   c [gpu] Progress:  34.18% (700/2048 batches)
+   0.5232s   c [gpu] Progress:  39.06% (800/2048 batches)
+   0.5172s   c [gpu] Progress:  43.95% (900/2048 batches)
+   0.5240s   c [gpu] Progress:  48.83% (1000/2048 batches)
+   0.5174s   c [gpu] Progress:  53.71% (1100/2048 batches)
+   0.5172s   c [gpu] Progress:  58.59% (1200/2048 batches)
+   0.5171s   c [gpu] Progress:  63.48% (1300/2048 batches)
+   0.5243s   c [gpu] Progress:  68.36% (1400/2048 batches)
+   0.5171s   c [gpu] Progress:  73.24% (1500/2048 batches)
+   0.5172s   c [gpu] Progress:  78.12% (1600/2048 batches)
+   0.5173s   c [gpu] Progress:  83.01% (1700/2048 batches)
+   0.5241s   c [gpu] Progress:  87.89% (1800/2048 batches)
+   0.5176s   c [gpu] Progress:  92.77% (1900/2048 batches)
+   0.2437s   c [gpu] Progress:  97.66% (2000/2048 batches)
+   0.0001s   c [gpuES] result = 20 [time = 10.71]
+   0.0000s   c [CEC] CEC check completed in 10.707452 seconds
+   0.0000s   s Equivalent.
+   0.0100s   c Runtime: 10.708 seconds
+             
+     Total   10.5733s
