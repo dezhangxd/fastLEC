@@ -603,7 +603,7 @@ fastLEC::ret_vals fastLEC::Simulator::run_pbits_pes(unsigned n_t)
         unsigned long long round = 0;
         for (; round < round_num; round++)
         {
-            if (Param::get().verbose > 1 && round % 100000 == 0){
+            if (Param::get().verbose > 1 && round % 1000 == 0 && para_idx == 0){
                 printf("c [iES] %6.2f%% : round %lld / %llu \n", (double)round / round_num * 100, round, round_num);
                 fflush(stdout);
             }
@@ -709,8 +709,9 @@ fastLEC::ret_vals fastLEC::Simulator::run_round_pes(unsigned n_t)
 
         for (unsigned long long round = start_round; round < end_round; round++)
         {
-            if (Param::get().verbose > 1 && round % 100000 == 0){
-                printf("c [iES] %6.2f%% : round %lld / %llu \n", (double)round / (end_round - start_round) * 100, round, end_round - start_round);
+            if (Param::get().verbose > 1 && (round - start_round) % 1000 == 0 && start_round == 0){
+                printf("c [iES] %6.2f%% : round %lld / %llu \n", 
+                    (double)(round - start_round) / (end_round - start_round) * 100, round - start_round, end_round - start_round);
                 fflush(stdout);
             }
             loc_mem[0].reset();

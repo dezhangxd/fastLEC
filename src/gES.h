@@ -1,6 +1,8 @@
 #ifndef _gES_h_
 #define _gES_h_
 
+#include <cstdint>
+
 #ifdef __cplusplus
 extern "C"
 {

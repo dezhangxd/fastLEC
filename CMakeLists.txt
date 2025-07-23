@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(fastLEC VERSION 0.1.0 LANGUAGES C CXX CUDA)
+project(fastLEC VERSION 0.1.0 LANGUAGES C CXX)
 
 # Set CUDA policy to suppress warnings
 cmake_policy(SET CMP0104 NEW)
@@ -8,9 +8,11 @@ cmake_policy(SET CMP0104 NEW)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Set CUDA standard
-set(CMAKE_CUDA_STANDARD 17)
-set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+# Set CUDA standard (only if CUDA is enabled)
+if(USE_CUDA)
+    set(CMAKE_CUDA_STANDARD 17)
+    set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+endif()
 
 # Set build type if not specified
 if(NOT CMAKE_BUILD_TYPE)
@@ -29,11 +31,15 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra")
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -O0")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -O0")
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -g -O0")
+    if(USE_CUDA)
+        set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -g -O0")
+    endif()
 else()
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3")
+    if(USE_CUDA)
+        set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3")
+    endif()
 endif()
 
 # Find required packages
@@ -79,6 +85,13 @@ if(USE_CUDA)
 else()
     set(CUDA_ENABLED FALSE)
     message(STATUS "CUDA support disabled")
+endif()
+
+# If CUDA is not available, disable CUDA language requirement
+if(NOT CUDA_ENABLED)
+    # Remove CUDA from project languages if not available
+    set(CMAKE_PROJECT_LANGUAGES C CXX)
+    message(STATUS "CUDA language removed from project requirements")
 endif()
 
 # ========================================
@@ -342,6 +355,16 @@ if(CUDA_ENABLED)
         src/gES.cu
     )
     list(APPEND SOURCES ${CUDA_SOURCES})
+else()
+    # Create a dummy CUDA source file when CUDA is not available
+    set(DUMMY_CUDA_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/dummy_gES.cpp")
+    configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/dummy_gES.cpp.in"
+        "${DUMMY_CUDA_SOURCE}"
+        @ONLY
+    )
+    list(APPEND SOURCES "${DUMMY_CUDA_SOURCE}")
+    message(STATUS "Using dummy CUDA source file: ${DUMMY_CUDA_SOURCE}")
 endif()
 
 # Header files
@@ -359,6 +382,9 @@ set(HEADERS
 set(EXISTING_SOURCES "")
 foreach(SOURCE ${SOURCES})
     if(EXISTS "${CMAKE_SOURCE_DIR}/${SOURCE}")
+        list(APPEND EXISTING_SOURCES ${SOURCE})
+    elseif(EXISTS "${SOURCE}")
+        # For generated files like dummy_gES.cpp
         list(APPEND EXISTING_SOURCES ${SOURCE})
     endif()
 endforeach()
@@ -533,7 +559,9 @@ message(STATUS "")
 message(STATUS "=== fastLEC Configuration Summary ===")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
-message(STATUS "CUDA standard: ${CMAKE_CUDA_STANDARD}")
+if(CUDA_ENABLED)
+    message(STATUS "CUDA standard: ${CMAKE_CUDA_STANDARD}")
+endif()
 message(STATUS "Use XGBoost: ${USE_XGBOOST}")
 message(STATUS "XGBoost: ${XGBOOST_FOUND}")
 message(STATUS "Use CUDD: ${USE_CUDD}")
