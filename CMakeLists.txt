@@ -1,8 +1,16 @@
 cmake_minimum_required(VERSION 3.16)
-project(fastLEC VERSION 0.1.0 LANGUAGES C CXX CUDA)
 
-# Set CUDA policy to suppress warnings
-cmake_policy(SET CMP0104 NEW)
+# Set CUDA option before project declaration
+option(USE_CUDA "Enable CUDA support" ON)
+
+# Conditionally include CUDA language
+if(USE_CUDA)
+    project(fastLEC VERSION 0.1.0 LANGUAGES C CXX CUDA)
+    # Set CUDA policy to suppress warnings
+    cmake_policy(SET CMP0104 NEW)
+else()
+    project(fastLEC VERSION 0.1.0 LANGUAGES C CXX)
+endif()
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
@@ -48,7 +56,6 @@ find_package(Threads REQUIRED)
 # ========================================
 # CUDA Configuration
 # ========================================
-option(USE_CUDA "Enable CUDA support" ON)
 if(USE_CUDA)
     # Try modern CUDA toolkit first
     find_package(CUDAToolkit QUIET)
