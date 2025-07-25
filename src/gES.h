@@ -9,10 +9,14 @@ extern "C"
 #endif
 
     // Instruction Simulator
-    typedef uint64_t bvec_t; // other bit-vector
+    typedef uint64_t bvec_t; // 64-bit bit-vector for cu 
+    typedef uint32_t bvec_ts; // 32-bit bit-vector for cu
     extern bvec_t festivals[6];
+    extern bvec_ts festivals_s[6];
     extern void bvec_set(bvec_t *vec);
+    extern void bvec_set_s(bvec_ts *vec);
     extern void bvec_reset(bvec_t *vec);
+    extern void bvec_reset_s(bvec_ts *vec);
 
     // the operation type
     typedef enum op_type
@@ -26,9 +30,9 @@ extern "C"
     typedef struct operation
     {
         op_type type : 2;
-        bvec_t addr1 : 16;
-        bvec_t addr2 : 16; // or const
-        bvec_t addr3 : 16;
+        uint32_t addr1 : 16;
+        uint32_t addr2 : 16; // or const
+        uint32_t addr3 : 16;
     } operation;
 
     typedef struct glob_ES
