@@ -19,6 +19,13 @@ bvec_t festivals[6] = {
     0xFFFF0000FFFF0000,
     0xFFFFFFFF00000000};
 
+bvec_ts festivals_s[5] = {
+    0xAAAAAAAA,
+    0xCCCCCCCC,
+    0xF0F0F0F0,
+    0xFF00FF00,
+    0xFFFF0000};
+
 void bvec_set(bvec_t *vec)
 {
     *vec = ~0ull;
@@ -27,6 +34,16 @@ void bvec_set(bvec_t *vec)
 void bvec_reset(bvec_t *vec)
 {
     *vec = 0ull;
+}
+
+void bvec_set_s(bvec_ts *vec)
+{
+    *vec = ~0u;
+}
+
+void bvec_reset_s(bvec_ts *vec)
+{
+    *vec = 0u;
 }
 
 void fastLEC::ISimulator::prt_bvec(bvec_t *vec)

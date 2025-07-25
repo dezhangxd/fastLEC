@@ -80,6 +80,81 @@ __global__ void batch_simulation_kernel(
     }
 }
 
+// Batch processing kernel using 32-bit bit vectors (bvec_ts)
+__global__ void batch_simulation_kernel_small(
+    operation *ops,               // operation array
+    unsigned n_ops,               // number of operations
+    unsigned mem_sz,              // memory size
+    unsigned PO_lit,              // output position
+    unsigned long long start_r,   // starting round
+    unsigned bv_bits,             // bit vector bits
+    unsigned PI_num,              // number of inputs
+    bvec_ts *festivals,           // fixed input patterns (32-bit)
+    int *results,                 // result array
+    unsigned long long batch_size // batch size
+)
+{
+    // Calculate the round processed by current thread
+    unsigned long long thread_id = blockIdx.x * blockDim.x + threadIdx.x;
+    if (thread_id >= batch_size)
+        return;
+
+    unsigned long long r = start_r + thread_id;
+
+    // Allocate local memory - each thread gets its own portion of shared memory
+    extern __shared__ bvec_ts shared_mem_small[];
+    bvec_ts *local_mems = &shared_mem_small[threadIdx.x * mem_sz];
+
+    // Initialize all memory to zero first
+    for (unsigned i = 0; i < mem_sz; i++)
+    {
+        local_mems[i] = 0u;
+    }
+
+    // Initialize constants
+    local_mems[0] = 0u;   // const0
+    local_mems[1] = ~0u;  // const1
+
+    // Set fixed input patterns
+    for (unsigned i = 0; i < bv_bits; i++)
+    {
+        local_mems[i + 2] = festivals[i];
+    }
+
+    // Set other inputs based on round
+    for (unsigned i = bv_bits; i < PI_num; i++)
+    {
+        unsigned long long k = (r >> (i - bv_bits)) & 1ull;
+        if (k == 1)
+            local_mems[i] = ~0u;
+        else
+            local_mems[i] = 0u;
+    }
+
+    // Execute simulation operations
+    for (unsigned i = 0; i < n_ops; i++)
+    {
+        operation op = ops[i];
+
+        if (op.type == OP_AND)
+            local_mems[op.addr1] = local_mems[op.addr2] & local_mems[op.addr3];
+        else if (op.type == OP_XOR)
+            local_mems[op.addr1] = local_mems[op.addr2] ^ local_mems[op.addr3];
+        else if (op.type == OP_NOT)
+            local_mems[op.addr1] = ~local_mems[op.addr2];
+    }
+
+    // Check result
+    if (local_mems[PO_lit] != 0u)
+    {
+        results[thread_id] = 10; // SAT
+    }
+    else
+    {
+        results[thread_id] = 20; // UNS
+    }
+}
+
 // GPU configuration structure
 struct GPUConfig
 {
@@ -88,10 +163,11 @@ struct GPUConfig
     unsigned long long maxConcurrentThreads;
     unsigned long long maxBatchSize;
     unsigned sharedMemSize;
+    bool useSmallBitVector;  // true for bvec_ts (32-bit), false for bvec_t (64-bit)
     bool isValid;
 
     GPUConfig() : threadsPerBlock(0), maxBlocksPerGrid(0), maxConcurrentThreads(0),
-                  maxBatchSize(0), sharedMemSize(0), isValid(false) {}
+                  maxBatchSize(0), sharedMemSize(0), useSmallBitVector(false), isValid(false) {}
 };
 
 // Function to calculate optimal thread block size
@@ -205,18 +281,45 @@ GPUConfig configure_gpu_parameters(unsigned mem_sz)
 
     GPUConfig config;
 
+    // First try with 64-bit bit vectors (bvec_t)
     unsigned sharedMemPerThread = mem_sz * sizeof(bvec_t);
     config.threadsPerBlock = calculate_optimal_threads_per_block(prop, sharedMemPerThread);
     config.sharedMemSize = config.threadsPerBlock * sharedMemPerThread;
+    config.useSmallBitVector = false;
 
     if (config.sharedMemSize > prop.sharedMemPerBlock)
     {
-        printf("c [gpu] ERROR: Required shared memory (%u bytes) exceeds limit (%lu bytes)\n",
+        printf("c [gpu] WARNING: Required shared memory (%u bytes) exceeds limit (%lu bytes)\n",
                config.sharedMemSize, prop.sharedMemPerBlock);
         printf("c [gpu] - Each thread needs %u bytes, block has %u threads\n",
                sharedMemPerThread, config.threadsPerBlock);
-        config.isValid = false;
-        return config;
+        
+        // Try with 32-bit bit vectors (bvec_ts)
+        printf("c [gpu] Trying with 32-bit bit vectors (bvec_ts) instead...\n");
+        sharedMemPerThread = mem_sz * sizeof(bvec_ts);
+        config.threadsPerBlock = calculate_optimal_threads_per_block(prop, sharedMemPerThread);
+        config.sharedMemSize = config.threadsPerBlock * sharedMemPerThread;
+        config.useSmallBitVector = true;
+        
+        if (config.sharedMemSize > prop.sharedMemPerBlock)
+        {
+            printf("c [gpu] ERROR: Even with 32-bit bit vectors, shared memory (%u bytes) still exceeds limit (%lu bytes)\n",
+                   config.sharedMemSize, prop.sharedMemPerBlock);
+            printf("c [gpu] - Each thread needs %u bytes, block has %u threads\n",
+                   sharedMemPerThread, config.threadsPerBlock);
+            config.isValid = false;
+            return config;
+        }
+        else
+        {
+            printf("c [gpu] SUCCESS: Using 32-bit bit vectors (bvec_ts) - shared memory: %u bytes\n",
+                   config.sharedMemSize);
+        }
+    }
+    else
+    {
+        printf("c [gpu] Using 64-bit bit vectors (bvec_t) - shared memory: %u bytes\n",
+               config.sharedMemSize);
     }
 
     unsigned maxBlocksByCompute = prop.multiProcessorCount * 32; // 32 blocks per SM is a good starting point
@@ -326,7 +429,24 @@ int gpu_run(glob_ES *ges, int verbose)
         fflush(stdout);
     }
 
-    const unsigned bv_bits = 6;
+    // Todo:: If rounds are too few, use CPU version
+
+    GPUConfig gpuConfig = configure_gpu_parameters(ges->mem_sz);
+
+    // Check if GPU configuration is valid
+    if (!gpuConfig.isValid)
+    {
+        printf("c ERROR: [gpu] GPU configuration failed, you should back to use CPU version\n");
+        return 0; // fallback to CPU version
+    }
+
+    // bv_bits depends on the bit vector size being used
+    unsigned bv_bits;
+    if (gpuConfig.useSmallBitVector) {
+        bv_bits = 5;  // 32-bit bit vectors can represent 32 bits, so 5 patterns
+    } else {
+        bv_bits = 6;  // 64-bit bit vectors can represent 64 bits, so 6 patterns
+    }
     unsigned r_bits = (ges->PI_num > bv_bits) ? (ges->PI_num - bv_bits) : 0;
     unsigned long long r_max = 1ULL << r_bits;
 
@@ -343,30 +463,32 @@ int gpu_run(glob_ES *ges, int verbose)
         0xFF00FF00FF00FF00,
         0xFFFF0000FFFF0000,
         0xFFFFFFFF00000000};
-
-    // Todo:: If rounds are too few, use CPU version
-
-    GPUConfig gpuConfig = configure_gpu_parameters(ges->mem_sz);
-
-    // Check if GPU configuration is valid
-    if (!gpuConfig.isValid)
-    {
-        printf("c ERROR: [gpu] GPU configuration failed, you should back to use CPU version\n");
-        return 0; // fallback to CPU version
-    }
+    
+    bvec_ts festivals_s[5] = {
+        0xAAAAAAAA,
+        0xCCCCCCCC,
+        0xF0F0F0F0,
+        0xFF00FF00,
+        0xFFFF0000};
 
     // Allocate device memory
     operation *d_ops;
-    bvec_t *d_festivals;
     int *d_results;
+    void *d_festivals;  // Will be cast to appropriate type based on config
 
     cudaMalloc(&d_ops, ges->n_ops * sizeof(operation));
-    cudaMalloc(&d_festivals, 6 * sizeof(bvec_t));
     cudaMalloc(&d_results, gpuConfig.maxBatchSize * sizeof(int));
 
-    // Copy data to device
+    // Allocate and copy festivals based on bit vector size
+    if (gpuConfig.useSmallBitVector) {
+        cudaMalloc(&d_festivals, 5 * sizeof(bvec_ts));
+        cudaMemcpy(d_festivals, festivals_s, 5 * sizeof(bvec_ts), cudaMemcpyHostToDevice);
+    } else {
+        cudaMalloc(&d_festivals, 6 * sizeof(bvec_t));
+        cudaMemcpy(d_festivals, festivals, 6 * sizeof(bvec_t), cudaMemcpyHostToDevice);
+    }
+
     cudaMemcpy(d_ops, ges->ops, ges->n_ops * sizeof(operation), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_festivals, festivals, 6 * sizeof(bvec_t), cudaMemcpyHostToDevice);
 
     int glob_res = 0;
 
@@ -391,10 +513,16 @@ int gpu_run(glob_ES *ges, int verbose)
         unsigned long long current_batch_size = end_r - start_r;
         unsigned blocksPerGrid = (current_batch_size + gpuConfig.threadsPerBlock - 1) / gpuConfig.threadsPerBlock;
 
-        // Launch kernel
-        batch_simulation_kernel<<<blocksPerGrid, gpuConfig.threadsPerBlock, gpuConfig.sharedMemSize>>>(
-            d_ops, ges->n_ops, ges->mem_sz, ges->PO_lit, start_r,
-            bv_bits, ges->PI_num, d_festivals, d_results, current_batch_size);
+        // Launch kernel based on bit vector size
+        if (gpuConfig.useSmallBitVector) {
+            batch_simulation_kernel_small<<<blocksPerGrid, gpuConfig.threadsPerBlock, gpuConfig.sharedMemSize>>>(
+                d_ops, ges->n_ops, ges->mem_sz, ges->PO_lit, start_r,
+                bv_bits, ges->PI_num, (bvec_ts*)d_festivals, d_results, current_batch_size);
+        } else {
+            batch_simulation_kernel<<<blocksPerGrid, gpuConfig.threadsPerBlock, gpuConfig.sharedMemSize>>>(
+                d_ops, ges->n_ops, ges->mem_sz, ges->PO_lit, start_r,
+                bv_bits, ges->PI_num, (bvec_t*)d_festivals, d_results, current_batch_size);
+        }
 
         // Check kernel execution error
         cudaError_t err = cudaGetLastError();

@@ -12,7 +12,7 @@ extern "C"
     typedef uint64_t bvec_t; // 64-bit bit-vector for cu 
     typedef uint32_t bvec_ts; // 32-bit bit-vector for cu
     extern bvec_t festivals[6];
-    extern bvec_ts festivals_s[6];
+    extern bvec_ts festivals_s[5];
     extern void bvec_set(bvec_t *vec);
     extern void bvec_set_s(bvec_ts *vec);
     extern void bvec_reset(bvec_t *vec);
