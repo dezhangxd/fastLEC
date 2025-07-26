@@ -842,7 +842,7 @@ fastLEC::ret_vals fastLEC::Simulator::run_ges()
     is->init_gpu_ES(xag, &ges);
 
     int res = gpu_run(ges, Param::get().verbose);
-    printf("c [gpuES] result = %d [time = %.2f]\n", res, ResMgr::get().get_runtime() - start_time);
+    printf("c [gpuInfo] result = %d [time = %.2f]\n", res, ResMgr::get().get_runtime() - start_time);
     if (ges != nullptr)
         free_gpu(ges);
 
@@ -856,6 +856,7 @@ fastLEC::ret_vals fastLEC::Simulator::run_ges()
 
 fastLEC::ret_vals fastLEC::Prove_Task::gpu_es()
 {
+    remain_time = Param::get().timeout - ResMgr::get().get_runtime();
     fastLEC::Simulator simu(*xag);
     return simu.run_ges();
 }

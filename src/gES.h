@@ -18,6 +18,8 @@ extern "C"
     extern void bvec_reset(bvec_t *vec);
     extern void bvec_reset_s(bvec_ts *vec);
 
+    extern double remain_time;
+
     // the operation type
     typedef enum op_type
     {

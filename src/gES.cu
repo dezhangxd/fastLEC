@@ -4,6 +4,9 @@
 #include <cuda_runtime.h>
 #include <cstdio>
 #include <cmath>
+#include <time.h>
+
+double remain_time = 500000;
 
 // Batch processing kernel: handle multiple rounds
 __global__ void batch_simulation_kernel(
@@ -429,6 +432,11 @@ int gpu_run(glob_ES *ges, int verbose)
         fflush(stdout);
     }
 
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    double t = ts.tv_sec + ts.tv_nsec / 1000000000.0;
+    t = ((long long)(t * 1000000)) / 1000000.0;
+
     // Todo:: If rounds are too few, use CPU version
 
     GPUConfig gpuConfig = configure_gpu_parameters(ges->mem_sz);
@@ -452,8 +460,8 @@ int gpu_run(glob_ES *ges, int verbose)
 
     if (verbose > 1)
     {
-        printf("c [gpu] PI_num = %u, PO_lit = %u, mem_sz = %u, n_ops = %u\n", ges->PI_num, ges->PO_lit, ges->mem_sz, ges->n_ops);
-        printf("c [gpu] r_bits = %u, r_max = %llu\n", r_bits, r_max);
+        printf("c [gpuInfo] PI_num = %u, PO_lit = %u, mem_sz = %u, n_ops = %u\n", ges->PI_num, ges->PO_lit, ges->mem_sz, ges->n_ops);
+        printf(";; r_bits = %u, r_max = %llu\n", r_bits, r_max);
         fflush(stdout);
     }
     bvec_t festivals[6] = {
@@ -498,13 +506,21 @@ int gpu_run(glob_ES *ges, int verbose)
 
     if (verbose > 1)
     {
-        printf("c [gpu] Processing %llu rounds in %llu batches of %llu each\n",
+        printf("c [gpuInfo] Processing %llu rounds in %llu batches of %llu each\n",
                r_max, num_batches, batch_size);
         fflush(stdout);
     }
 
     for (unsigned long long batch = 0; batch < num_batches && glob_res != 10; batch++)
     {
+        struct timespec te;
+        clock_gettime(CLOCK_MONOTONIC, &te);
+        double tt = te.tv_sec + te.tv_nsec / 1000000000.0;
+        tt = ((long long)(tt * 1000000)) / 1000000.0;
+        
+        if(tt - t > remain_time)
+            break;
+
         unsigned long long start_r = batch * batch_size;
         unsigned long long end_r = (batch + 1) * batch_size;
         if (end_r > r_max)
