@@ -8,6 +8,9 @@
 // Only implement CUDA-specific functions that are not already defined elsewhere
 // bvec_set, bvec_reset, and festivals are already defined in simu.cpp
 
+// Define remain_time variable that is used in simu.cpp
+double remain_time = 500000;
+
 glob_ES *gpu_init() {
     std::cerr << "Warning: CUDA support not available. GPU ES functions are disabled." << std::endl;
     return nullptr;
