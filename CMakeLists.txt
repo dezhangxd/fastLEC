@@ -235,6 +235,55 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/deps/aiger/aiger.h")
     set(AIGER_FOUND TRUE)
     set(AIGER_INCLUDE_DIRS "${CMAKE_SOURCE_DIR}/deps/aiger")
     message(STATUS "AIGER submodule found")
+    
+    # Check for problematic files that might cause compilation errors
+    # These files contain non-C++ content but might be accidentally included
+    if(EXISTS "${CMAKE_SOURCE_DIR}/deps/aiger/format")
+        message(STATUS "Renaming AIGER format file to prevent compilation conflicts")
+        execute_process(
+            COMMAND ${CMAKE_COMMAND} -E rename 
+            "${CMAKE_SOURCE_DIR}/deps/aiger/format" 
+            "${CMAKE_SOURCE_DIR}/deps/aiger/format.bak"
+            RESULT_VARIABLE RENAME_RESULT
+        )
+        if(RENAME_RESULT EQUAL 0)
+            message(STATUS "  - format -> format.bak")
+        else()
+            message(WARNING "Failed to rename format file")
+        endif()
+    endif()
+    
+    if(EXISTS "${CMAKE_SOURCE_DIR}/deps/aiger/VERSION")
+        message(STATUS "Renaming AIGER VERSION file to prevent compilation conflicts")
+        execute_process(
+            COMMAND ${CMAKE_COMMAND} -E rename 
+            "${CMAKE_SOURCE_DIR}/deps/aiger/VERSION" 
+            "${CMAKE_SOURCE_DIR}/deps/aiger/VERSION.bak"
+            RESULT_VARIABLE RENAME_RESULT
+        )
+        if(RENAME_RESULT EQUAL 0)
+            message(STATUS "  - VERSION -> VERSION.bak")
+        else()
+            message(WARNING "Failed to rename VERSION file")
+        endif()
+    endif()
+    
+    # Check for lowercase version file as well
+    if(EXISTS "${CMAKE_SOURCE_DIR}/deps/aiger/version")
+        message(STATUS "Renaming AIGER version file to prevent compilation conflicts")
+        execute_process(
+            COMMAND ${CMAKE_COMMAND} -E rename 
+            "${CMAKE_SOURCE_DIR}/deps/aiger/version" 
+            "${CMAKE_SOURCE_DIR}/deps/aiger/version.bak"
+            RESULT_VARIABLE RENAME_RESULT
+        )
+        if(RENAME_RESULT EQUAL 0)
+            message(STATUS "  - version -> version.bak")
+        else()
+            message(WARNING "Failed to rename version file")
+        endif()
+    endif()
+    
 else()
     message(WARNING "AIGER submodule not found. Run: git submodule update --init --recursive")
     set(AIGER_FOUND FALSE)
