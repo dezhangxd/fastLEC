@@ -59,7 +59,4 @@ fi
 echo "Cleanup completed!"
 echo ""
 echo "To rebuild the project:"
-echo "  mkdir build"
-echo "  cd build"
-echo "  cmake .."
-echo "  make"
+echo "  ./build.sh"
