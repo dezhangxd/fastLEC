@@ -112,36 +112,62 @@ if(USE_CUDA)
         # Additional CUDA library search paths
         if(CUDAToolkit_FOUND)
             list(APPEND CMAKE_LIBRARY_PATH ${CUDAToolkit_LIBRARY_DIRS})
-            # Add specific CUDA 12.4 paths
+        endif()
+        
+        # Platform-specific CUDA library paths
+        if(APPLE)
+            # macOS CUDA paths
+            list(APPEND CMAKE_LIBRARY_PATH "/usr/local/cuda/lib")
+            list(APPEND CMAKE_LIBRARY_PATH "/opt/cuda/lib")
+        else()
+            # Linux CUDA paths
+            list(APPEND CMAKE_LIBRARY_PATH "/usr/local/cuda-12.4/targets/x86_64-linux/lib")
+            list(APPEND CMAKE_LIBRARY_PATH "/usr/lib/x86_64-linux-gnu")
             list(APPEND CMAKE_LIBRARY_PATH "/usr/local/cuda-12.4/targets/x86_64-linux/lib")
         endif()
-        # Always add common CUDA library paths
-        list(APPEND CMAKE_LIBRARY_PATH "/usr/lib/x86_64-linux-gnu")
-        list(APPEND CMAKE_LIBRARY_PATH "/usr/local/cuda-12.4/targets/x86_64-linux/lib")
         
         # Try to find CUDA libraries in common locations
-        find_library(CUDA_LIBRARY cuda 
-            PATHS 
-            /usr/lib/x86_64-linux-gnu
-            /usr/local/cuda-12.4/targets/x86_64-linux/lib
-            /usr/local/cuda/lib64
-            /usr/local/cuda/lib
-            ${CUDAToolkit_LIBRARY_DIRS}
-            /opt/cuda/lib64
-            /opt/cuda/lib
-            NO_DEFAULT_PATH
-        )
-        find_library(CUDART_LIBRARY cudart
-            PATHS 
-            /usr/local/cuda-12.4/targets/x86_64-linux/lib
-            /usr/lib/x86_64-linux-gnu
-            /usr/local/cuda/lib64
-            /usr/local/cuda/lib
-            ${CUDAToolkit_LIBRARY_DIRS}
-            /opt/cuda/lib64
-            /opt/cuda/lib
-            NO_DEFAULT_PATH
-        )
+        if(APPLE)
+            # macOS CUDA library paths
+            find_library(CUDA_LIBRARY cuda 
+                PATHS 
+                /usr/local/cuda/lib
+                /opt/cuda/lib
+                ${CUDAToolkit_LIBRARY_DIRS}
+                NO_DEFAULT_PATH
+            )
+            find_library(CUDART_LIBRARY cudart
+                PATHS 
+                /usr/local/cuda/lib
+                /opt/cuda/lib
+                ${CUDAToolkit_LIBRARY_DIRS}
+                NO_DEFAULT_PATH
+            )
+        else()
+            # Linux CUDA library paths
+            find_library(CUDA_LIBRARY cuda 
+                PATHS 
+                /usr/lib/x86_64-linux-gnu
+                /usr/local/cuda-12.4/targets/x86_64-linux/lib
+                /usr/local/cuda/lib64
+                /usr/local/cuda/lib
+                ${CUDAToolkit_LIBRARY_DIRS}
+                /opt/cuda/lib64
+                /opt/cuda/lib
+                NO_DEFAULT_PATH
+            )
+            find_library(CUDART_LIBRARY cudart
+                PATHS 
+                /usr/local/cuda-12.4/targets/x86_64-linux/lib
+                /usr/lib/x86_64-linux-gnu
+                /usr/local/cuda/lib64
+                /usr/local/cuda/lib
+                ${CUDAToolkit_LIBRARY_DIRS}
+                /opt/cuda/lib64
+                /opt/cuda/lib
+                NO_DEFAULT_PATH
+            )
+        endif()
         
         if(CUDA_LIBRARY AND CUDART_LIBRARY)
             set(CUDA_LIBRARIES ${CUDA_LIBRARY} ${CUDART_LIBRARY})
@@ -349,42 +375,75 @@ if(CUDD_FOUND)
         message(STATUS "CUDD library not found, building it now...")
         
         # Generate build files with autoreconf
-        set(ENV{PATH} "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
-        execute_process(
-            COMMAND autoreconf -i
-            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/cudd
-            RESULT_VARIABLE AUTORECONF_RESULT
-            OUTPUT_VARIABLE AUTORECONF_OUTPUT
-            ERROR_VARIABLE AUTORECONF_ERROR
-        )
+        # For macOS, use the correct autoreconf command
+        if(APPLE)
+            execute_process(
+                COMMAND autoreconf -f -i
+                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/cudd
+                RESULT_VARIABLE AUTORECONF_RESULT
+                OUTPUT_VARIABLE AUTORECONF_OUTPUT
+                ERROR_VARIABLE AUTORECONF_ERROR
+            )
+        else()
+            set(ENV{PATH} "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+            execute_process(
+                COMMAND autoreconf -i
+                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/cudd
+                RESULT_VARIABLE AUTORECONF_RESULT
+                OUTPUT_VARIABLE AUTORECONF_OUTPUT
+                ERROR_VARIABLE AUTORECONF_ERROR
+            )
+        endif()
         
         if(NOT AUTORECONF_RESULT EQUAL 0)
             message(FATAL_ERROR "Failed to run autoreconf for CUDD: ${AUTORECONF_ERROR}")
         endif()
         
         # Configure CUDD
-        set(ENV{PATH} "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
-        execute_process(
-            COMMAND ${CMAKE_SOURCE_DIR}/deps/cudd/configure --quiet --enable-silent-rules --enable-shared --enable-obj
-            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/cudd
-            RESULT_VARIABLE CONFIGURE_RESULT
-            OUTPUT_VARIABLE CONFIGURE_OUTPUT
-            ERROR_VARIABLE CONFIGURE_ERROR
-        )
+        if(APPLE)
+            # For macOS, use simpler configure options
+            execute_process(
+                COMMAND ${CMAKE_SOURCE_DIR}/deps/cudd/configure --quiet
+                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/cudd
+                RESULT_VARIABLE CONFIGURE_RESULT
+                OUTPUT_VARIABLE CONFIGURE_OUTPUT
+                ERROR_VARIABLE CONFIGURE_ERROR
+            )
+        else()
+            set(ENV{PATH} "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+            execute_process(
+                COMMAND ${CMAKE_SOURCE_DIR}/deps/cudd/configure --quiet --enable-silent-rules --enable-shared --enable-obj
+                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/cudd
+                RESULT_VARIABLE CONFIGURE_RESULT
+                OUTPUT_VARIABLE CONFIGURE_OUTPUT
+                ERROR_VARIABLE CONFIGURE_ERROR
+            )
+        endif()
         
         if(NOT CONFIGURE_RESULT EQUAL 0)
             message(FATAL_ERROR "Failed to configure CUDD: ${CONFIGURE_ERROR}")
         endif()
         
         # Build CUDD
-        set(ENV{PATH} "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
-        execute_process(
-            COMMAND make -j${CMAKE_BUILD_PARALLEL_LEVEL}
-            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/cudd
-            RESULT_VARIABLE BUILD_RESULT
-            OUTPUT_VARIABLE BUILD_OUTPUT
-            ERROR_VARIABLE BUILD_ERROR
-        )
+        if(APPLE)
+            # For macOS, don't set PATH environment
+            execute_process(
+                COMMAND make -j${CMAKE_BUILD_PARALLEL_LEVEL}
+                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/cudd
+                RESULT_VARIABLE BUILD_RESULT
+                OUTPUT_VARIABLE BUILD_OUTPUT
+                ERROR_VARIABLE BUILD_ERROR
+            )
+        else()
+            set(ENV{PATH} "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+            execute_process(
+                COMMAND make -j${CMAKE_BUILD_PARALLEL_LEVEL}
+                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/cudd
+                RESULT_VARIABLE BUILD_RESULT
+                OUTPUT_VARIABLE BUILD_OUTPUT
+                ERROR_VARIABLE BUILD_ERROR
+            )
+        endif()
         
         if(NOT BUILD_RESULT EQUAL 0)
             message(FATAL_ERROR "Failed to build CUDD: ${BUILD_ERROR}")
