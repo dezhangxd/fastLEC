@@ -50,7 +50,7 @@ void fastLEC::ISimulator::prt_bvec(bvec_t *vec)
 {
     for (bvec_t i = 0; i < BVEC_SIZE; i++)
     {
-        printf("%ld", (*vec >> i) & 1);
+        printf("%llu", (*vec >> i) & 1);
     }
     printf("\n");
 }
@@ -545,12 +545,12 @@ ret_vals fastLEC::Simulator::run_es()
             states[olit] = ~states[aiger_not(olit)], refs[olit] = true;
         if (states[olit].has_one())
         {
-            printf("c [EPS] result = 10 [round %lu] [time = %.2f]\n", round, ResMgr::get().get_runtime() - start_time);
+            printf("c [EPS] result = 10 [round %llu] [time = %.2f]\n", round, ResMgr::get().get_runtime() - start_time);
             return ret_vals::ret_SAT;
         }
         if (ResMgr::get().get_runtime() > Param::get().timeout)
         {
-            printf("c [EPS] round %8lu: %lf %lf\n", round, start_time, ResMgr::get().get_runtime() - start_time);
+            printf("c [EPS] round %8llu: %lf %lf\n", round, start_time, ResMgr::get().get_runtime() - start_time);
             break;
         }
     }

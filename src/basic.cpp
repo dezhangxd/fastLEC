@@ -77,7 +77,7 @@ void BitVector::resize(int width)
     _width = width;
     if (_width % unit_width != 0)
     {
-        printf("c [BitVector] error: nBits %ld is not a multiple of bit_width %d\n", _width, unit_width);
+        printf("c [BitVector] error: nBits %llu is not a multiple of bit_width %d\n", _width, unit_width);
         exit(0);
     }
     _array.resize(_width / unit_width);

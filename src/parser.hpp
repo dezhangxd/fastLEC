@@ -144,7 +144,7 @@ namespace fastLEC
     printf("c     %-20s %s [default: ", #param_name, description); \
     if constexpr (std::is_same_v<type, bool>)                      \
     {                                                              \
-        printf("%s", default_val ? "true" : "false");              \
+        printf("%s", static_cast<bool>(default_val) ? "true" : "false"); \
     }                                                              \
     else if constexpr (std::is_same_v<type, int>)                  \
     {                                                              \
