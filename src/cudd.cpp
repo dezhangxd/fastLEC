@@ -11,6 +11,11 @@ extern "C"
 #include "../deps/cudd/cudd/cudd.h"
 }
 
+// Undefine the fail macro to avoid conflicts with C++ standard library
+#ifdef fail
+#undef fail
+#endif
+
 #include "fastLEC.hpp"
 
 using namespace fastLEC;
