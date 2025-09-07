@@ -1,13 +1,11 @@
-#include <iostream>
-#include <ios>
 #include <cstring>
 #include <sys/stat.h>
-#include <sstream>
+#include <cstdio>
+#include <cassert>
 
 extern "C"
 {
 #include "../deps/cudd/config.h"
-#include "../deps/cudd/util/util.h"
 #include "../deps/cudd/cudd/cudd.h"
 }
 
@@ -17,58 +15,35 @@ extern "C"
 #endif
 
 #include "fastLEC.hpp"
+#include "cudd.hpp"
 
 using namespace fastLEC;
 
 /**
- * Print a dd summary
+ * Print a dd summary using BDD wrapper
  * pr = 0 : prints nothing
  * pr = 1 : prints counts of nodes and minterms
  * pr = 2 : prints counts + disjoint sum of product
  * pr = 3 : prints counts + list of nodes
  * pr > 3 : prints counts + disjoint sum of product + list of nodes
- * @param the dd node
+ * @param the BDD node
  */
-void print_dd(DdManager *gbm, DdNode *dd, int n, int pr)
+void print_dd(std::shared_ptr<CuddManager> manager, const BDD& bdd, int n, int pr)
 {
-    printf("DdManager nodes: %ld | ", Cudd_ReadNodeCount(gbm));        /*Reports the number of live nodes in BDDs and ADDs*/
-    printf("DdManager vars: %d | ", Cudd_ReadSize(gbm));               /*Returns the number of BDD variables in existence*/
-    printf("DdManager reorderings: %d | ", Cudd_ReadReorderings(gbm)); /*Returns the number of times reordering has occurred*/
-    printf("DdManager memory: %ld \n", Cudd_ReadMemoryInUse(gbm));     /*Returns the memory in use by the manager measured in bytes*/
-    Cudd_PrintDebug(gbm, dd, n, pr);
+    BDDUtils::printDD(manager, bdd, n, pr);
 }
 
 /**
- * Writes a dot file representing the argument DDs
- * @param the node object
+ * Writes a dot file representing the argument BDDs
+ * @param the BDD object
  */
-void write_dd(DdManager *gbm, DdNode *dd, char *filename)
+void write_dd(std::shared_ptr<CuddManager> manager, const BDD& bdd, const char* filename)
 {
-    char dir_path[256];
-    strcpy(dir_path, filename);
-    char *last_slash = strrchr(dir_path, '/');
-    if (last_slash != NULL)
-    {
-        *last_slash = '\0';
-#ifdef _WIN32
-        _mkdir(dir_path);
-#else
-        mkdir(dir_path, 0755);
-#endif
-    }
-
-    FILE *outfile; // output file pointer for .dot file
-    outfile = fopen(filename, "w");
-    DdNode **ddnodearray = (DdNode **)malloc(sizeof(DdNode *)); // initialize the function array
-    ddnodearray[0] = dd;
-    Cudd_DumpDot(gbm, 1, ddnodearray, NULL, NULL, outfile); // dump the function to .dot file
-    free(ddnodearray);
-    fclose(outfile); // close the file */
+    BDDUtils::writeDD(manager, bdd, filename);
 }
 
 fastLEC::ret_vals fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag)
 {
-
     double start_time = fastLEC::ResMgr::get().get_runtime();
 
     if (xag == nullptr)
@@ -77,94 +52,84 @@ fastLEC::ret_vals fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xa
         return ret_vals::ret_UNK;
     }
 
-    DdManager *gbm;
-    gbm = Cudd_Init(0, 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
-    if (!gbm)
+    try
     {
-        printf("c [BDD] Error: Failed to initialize CUDD manager, returning UNKNOWN\n");
+        // Create CUDD manager with shared_ptr for automatic cleanup
+        auto manager = std::make_shared<CuddManager>(0, 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
+        
+        // Create BDD nodes vector with smart pointer management
+        std::vector<BDD> nodes(xag->max_var + 1);
+        nodes[0] = BDDFactory::createZero(manager);
+
+        // Create input variables
+        for (int i : xag->PI)
+        {
+            int ivar = aiger_var(i);
+            nodes[ivar] = BDDFactory::createVar(manager);
+        }
+
+        // Process gates
+        for (int gid : xag->used_gates)
+        {
+            Gate &g = xag->gates[gid];
+
+            BDD i1 = nodes[aiger_var(g.inputs[0])];
+            if (aiger_sign(g.inputs[0]))
+                i1 = !i1;
+
+            BDD i2 = nodes[aiger_var(g.inputs[1])];
+            if (aiger_sign(g.inputs[1]))
+                i2 = !i2;
+
+            if (g.type == GateType::AND2)
+            {
+                nodes[aiger_var(g.output)] = i1 & i2;
+            }
+            else if (g.type == GateType::XOR2)
+            {
+                nodes[aiger_var(g.output)] = i1 ^ i2;
+            }
+        }
+
+        ret_vals ret = ret_vals::ret_UNK;
+
+        int po_var = aiger_var(xag->PO);
+        if (po_var < 0 || po_var > xag->max_var || nodes[po_var].isNull())
+        {
+            printf("c [BDD] Error: Invalid PO variable index %d or null node, returning UNKNOWN\n", po_var);
+            return ret_vals::ret_UNK;
+        }
+
+        assert(!nodes[po_var].isNull());
+
+        if (aiger_sign(xag->PO))
+        {
+            if (nodes[po_var] == !BDDFactory::createZero(manager))
+                ret = ret_vals::ret_UNS;
+            else
+                ret = ret_vals::ret_SAT;
+        }
+        else
+        {
+            if (nodes[po_var] == BDDFactory::createZero(manager))
+                ret = ret_vals::ret_UNS;
+            else
+                ret = ret_vals::ret_SAT;
+        }
+
+        printf("c [BDD] result = %d, ", ret);
+        printf("[nodes = %ld,", manager->readNodeCount());
+        printf(" vars = %d,", manager->readSize());
+        printf(" reorderings = %d,", manager->readReorderings());
+        printf(" memory = %ld bytes]", (long)manager->readMemoryInUse());
+        printf(" [time = %f] \n", fastLEC::ResMgr::get().get_runtime() - start_time);
+
+        // Automatic cleanup through RAII - no manual dereferencing needed
+        return ret;
+    }
+    catch (const std::exception& e)
+    {
+        printf("c [BDD] Error: %s, returning UNKNOWN\n", e.what());
         return ret_vals::ret_UNK;
     }
-
-    std::vector<DdNode *> nodes(xag->max_var + 1, nullptr);
-    nodes[0] = Cudd_ReadLogicZero(gbm);
-
-    for (int i : xag->PI)
-    {
-        int ivar = aiger_var(i);
-        nodes[ivar] = Cudd_bddNewVar(gbm);
-    }
-
-    for (int gid : xag->used_gates)
-    {
-        Gate &g = xag->gates[gid];
-
-        DdNode *i1 = nodes[aiger_var(g.inputs[0])];
-        if (aiger_sign(g.inputs[0]))
-            i1 = Cudd_Not(i1);
-
-        DdNode *i2 = nodes[aiger_var(g.inputs[1])];
-        if (aiger_sign(g.inputs[1]))
-            i2 = Cudd_Not(i2);
-
-        if (g.type == GateType::AND2)
-        {
-            nodes[aiger_var(g.output)] = Cudd_bddAnd(gbm, i1, i2);
-        }
-        else if (g.type == GateType::XOR2)
-        {
-            nodes[aiger_var(g.output)] = Cudd_bddXor(gbm, i1, i2);
-        }
-        Cudd_Ref(nodes[aiger_var(g.output)]);
-    }
-
-    ret_vals ret = ret_vals::ret_UNK;
-
-    int po_var = aiger_var(xag->PO);
-    if (po_var < 0 || po_var > xag->max_var || nodes[po_var] == nullptr)
-    {
-        printf("c [BDD] Error: Invalid PO variable index %d or null node, returning UNKNOWN\n", po_var);
-        return ret_vals::ret_UNK;
-    }
-
-    assert(nodes[po_var] != nullptr);
-
-    if (aiger_sign(xag->PO))
-    {
-        if (nodes[po_var] == Cudd_Not(Cudd_ReadLogicZero(gbm)))
-            ret = ret_vals::ret_UNS;
-        else
-            ret = ret_vals::ret_SAT;
-    }
-    else
-    {
-        if (nodes[po_var] == Cudd_ReadLogicZero(gbm))
-            ret = ret_vals::ret_UNS;
-        else
-            ret = ret_vals::ret_SAT;
-    }
-
-    int res = 0;
-    if (ret == ret_vals::ret_SAT)
-        res = 10;
-    else if (ret == ret_vals::ret_UNS)
-        res = 20;
-    else
-        res = 0;
-
-    printf("c [BDD] result = %d, ", res);
-    printf("[nodes = %ld,", Cudd_ReadNodeCount(gbm));
-    printf(" vars = %d,", Cudd_ReadSize(gbm));
-    printf(" reorderings = %d,", Cudd_ReadReorderings(gbm));
-    printf(" memory = %ld bytes]", (long)Cudd_ReadMemoryInUse(gbm));
-    printf(" [time = %f] \n", fastLEC::ResMgr::get().get_runtime() - start_time);
-
-    for (int i = 0; i <= xag->max_var; i++)
-    {
-        if (nodes[i] != nullptr)
-            Cudd_RecursiveDeref(gbm, nodes[i]);
-    }
-
-    Cudd_Quit(gbm);
-
-    return ret;
 }

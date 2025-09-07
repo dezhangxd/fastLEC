@@ -6,6 +6,7 @@
 #include "XAG.hpp"   // XAG
 #include "CNF.hpp"   // CNF
 #include "basic.hpp" // basic
+#include "cudd.hpp"  // CUDD BDD wrapper
 
 namespace fastLEC
 {
