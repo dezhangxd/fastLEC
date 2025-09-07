@@ -117,14 +117,15 @@ fastLEC::ret_vals fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xa
                 ret = ret_vals::ret_SAT;
         }
 
-        printf("c [BDD] result = %d, ", ret);
-        printf("[nodes = %ld,", manager->readNodeCount());
-        printf(" vars = %d,", manager->readSize());
-        printf(" reorderings = %d,", manager->readReorderings());
-        printf(" memory = %ld bytes]", (long)manager->readMemoryInUse());
-        printf(" [time = %f] \n", fastLEC::ResMgr::get().get_runtime() - start_time);
+        printf("c [BDD] result = %d, [nodes = %ld, vars = %d, reorderings = %d, memory = %ld bytes] [time = %f] \n", 
+            ret, 
+            manager->readNodeCount(), 
+            manager->readSize(),
+            manager->readReorderings(),
+            (long)manager->readMemoryInUse(), 
+            fastLEC::ResMgr::get().get_runtime() - start_time);
+        fflush(stdout);
 
-        // Automatic cleanup through RAII - no manual dereferencing needed
         return ret;
     }
     catch (const std::exception& e)
