@@ -69,7 +69,29 @@ fastLEC::ret_vals Prover::check_cec()
     FormatManager fm;
     fm.set_aig(aig);
 
-    if (Param::get().mode == Mode::SAT)
+    if (Param::get().mode == Mode::BDD ||
+             Param::get().mode == Mode::ES ||
+             Param::get().mode == Mode::pES ||
+             Param::get().mode == Mode::gpuES)
+    {
+        bool b_res = fm.aig_to_cnf();
+        if (!b_res)
+        {
+            fprintf(stderr, "c [CEC] Error: Failed to build CNF\n");
+            return ret_vals::ret_UNK;
+        }
+        std::shared_ptr<fastLEC::XAG> xag = fm.get_xag_shared();
+
+        if (Param::get().mode == Mode::BDD)
+            ret = seq_BDD_cudd(xag);
+        else if (Param::get().mode == Mode::ES)
+            ret = seq_ES(xag);
+        else if (Param::get().mode == Mode::pES)
+            ret = para_ES(xag, Param::get().n_threads);
+        else if (Param::get().mode == Mode::gpuES)
+            ret = gpu_ES(xag);
+    }
+    else if (Param::get().mode == Mode::SAT)
     {
         bool b_res = fm.aig_to_cnf();
         if (!b_res)
@@ -78,29 +100,9 @@ fastLEC::ret_vals Prover::check_cec()
             return ret_vals::ret_UNK;
         }
         std::shared_ptr<fastLEC::CNF> cnf = fm.get_cnf_shared();
-        // TODO: Update seq_SAT_kissat to accept shared_ptr
+
         ret = seq_SAT_kissat(cnf);
     }
-    // else if (Param::get().mode == Mode::BDD ||
-    //          Param::get().mode == Mode::ES ||
-    //          Param::get().mode == Mode::pES ||
-    //          Param::get().mode == Mode::gpuES)
-    // {
-    //     bool b_res = main_task->aig_to_xag();
-    //     if (!b_res)
-    //     {
-    //         fprintf(stderr, "c [CEC] Error: Failed to build XAG\n");
-    //         return ret_vals::ret_UNK;
-    //     }
-    //     if (Param::get().mode == Mode::BDD)
-    //         ret = main_task->seq_bdd_cudd();
-    //     else if (Param::get().mode == Mode::ES)
-    //         ret = main_task->seq_es();
-    //     else if (Param::get().mode == Mode::pES)
-    //         ret = main_task->para_es(Param::get().n_threads);
-    //     else if (Param::get().mode == Mode::gpuES)
-    //         ret = main_task->gpu_es();
-    // }
 
     if (Param::get().verbose > 0){
         printf("c [CEC] CEC check completed in %f seconds\n", fastLEC::ResMgr::get().get_runtime() - start_time);
