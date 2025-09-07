@@ -532,7 +532,8 @@ set(SOURCES
     src/CNF.cpp
     src/seqSAT.cpp
     src/cudd.cpp
-    src/simu.cpp
+    src/simu_seq.cpp
+    src/simu_para.cpp
 )
 
 # CUDA source files

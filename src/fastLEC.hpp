@@ -82,9 +82,9 @@ namespace fastLEC
         bool read_aiger(const std::string &filename = "");
 
         //---------------------------------------------------
-        fastLEC::ret_vals fast_aig_check(std::shared_ptr<fastLEC::AIG> aig);
-        fastLEC::ret_vals seq_SAT_kissat(std::shared_ptr<fastLEC::CNF> cnf);
-        fastLEC::ret_vals seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag);
+        fastLEC::ret_vals fast_aig_check(std::shared_ptr<fastLEC::AIG> aig); // check const output of AIG
+        fastLEC::ret_vals seq_SAT_kissat(std::shared_ptr<fastLEC::CNF> cnf); // using kissat to solve CNF
+        fastLEC::ret_vals seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag);  // using CUDD to XAG
         fastLEC::ret_vals seq_ES(std::shared_ptr<fastLEC::XAG> xag);
         fastLEC::ret_vals para_ES(std::shared_ptr<fastLEC::XAG> xag, int n_thread = 1);
         fastLEC::ret_vals gpu_ES(std::shared_ptr<fastLEC::XAG> xag);

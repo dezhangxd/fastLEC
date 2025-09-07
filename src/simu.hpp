@@ -50,16 +50,20 @@ namespace fastLEC
         Simulator(fastLEC::XAG &xag) : xag(xag) {}
         ~Simulator() = default;
 
+        // sequential methods
         unsigned bv_bits, para_bits, batch_bits;
-        void cal_es_bits(unsigned threads_for_es = 1);
-
-        fastLEC::ret_vals run_es();
-        fastLEC::ret_vals run_ies();
-        fastLEC::ret_vals run_ges();
-
-        unsigned cal_pes_threads(unsigned n_thread);
-        fastLEC::ret_vals run_pbits_pes(unsigned n_t);
+        void cal_es_bits(unsigned threads_for_es = 1);    // calculate the bv_bits, para_bits, batch_bits.
+        fastLEC::ret_vals run_es();     // using normal ES method on original XAG
+        fastLEC::ret_vals run_ies();    // ES with (instruction) compacted XAG 
+        
+        // parallel methods
+        unsigned cal_pes_threads(unsigned n_thread);    // calculate the number of used threads for PES "round"
         fastLEC::ret_vals run_round_pes(unsigned n_t);
+        fastLEC::ret_vals run_pbits_pes(unsigned n_t);  
+
+        // GPU parallel methods
+        fastLEC::ret_vals run_ges();    // using GPU ES methods on compacted XAG
+        
     };
 
 } // namespace fastLEC
