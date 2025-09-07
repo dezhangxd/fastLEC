@@ -60,15 +60,10 @@ fastLEC::ret_vals fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xa
         // Create CUDD manager with shared_ptr for automatic cleanup
         auto manager = std::make_shared<CuddManager>(0, 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
         
-        // Set timeout based on remaining time (using a default timeout of 3600 seconds)
+        // Set timeout based on remaining time
         double remaining_time = fastLEC::Param::get().timeout - fastLEC::ResMgr::get().get_runtime();
-        if (remaining_time > 0) {
-            // Convert to milliseconds and set timeout
-            unsigned long timeout_ms = static_cast<unsigned long>(remaining_time * 1000);
-            manager->setTimeLimit(timeout_ms);
-            // Reset start time to current time for proper timeout calculation
-            manager->resetStartTime();
-        }
+        manager->setTimeLimit(remaining_time * 1000);
+        manager->resetStartTime();
         
         // Create BDD nodes vector with smart pointer management
         std::vector<class fastLEC::BDD> nodes(xag->max_var + 1);
@@ -81,18 +76,24 @@ fastLEC::ret_vals fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xa
             nodes[ivar] = BDDFactory::createVar(manager);
         }
 
-        // Process gates
+        // Process gates with precise external timeout checking
         bool timeout_detected = false;
+        int gate_count = 0;
+        const int check_interval = 100; // Check timeout every 100 gates
+        
         for (int gid : xag->used_gates)
         {
-            // Check for timeout during processing
-            if (manager->hasTimeout() || manager->hasTermination()) {
-                timeout_detected = true;
-                break;
+            // Check timeout more frequently for better accuracy
+            if (gate_count % check_interval == 0) {
+                double current_time = fastLEC::ResMgr::get().get_runtime();
+                if (current_time > Param::get().timeout) {
+                    timeout_detected = true;
+                    break;
+                }
             }
             
-            // Check remaining time (using a default timeout of 3600 seconds)
-            if (fastLEC::ResMgr::get().get_runtime() > 3600.0) {
+            // Also check CUDD internal timeout (as backup)
+            if (manager->hasTimeout() || manager->hasTermination()) {
                 timeout_detected = true;
                 break;
             }
@@ -121,12 +122,20 @@ fastLEC::ret_vals fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xa
                 timeout_detected = true;
                 break;
             }
+            
+            gate_count++;
         }
 
         ret_vals ret = ret_vals::ret_UNK;
 
-        // Check if timeout was detected during processing
-        if (timeout_detected || manager->hasTimeout() || manager->hasTermination()) {
+        // Final timeout check with precise timing
+        double final_time = fastLEC::ResMgr::get().get_runtime();
+        bool final_timeout = timeout_detected || 
+                           (final_time > Param::get().timeout) ||
+                           manager->hasTimeout() || 
+                           manager->hasTermination();
+        
+        if (final_timeout) {
             ret = ret_vals::ret_UNK;
         } else {
             // Normal result evaluation
@@ -155,7 +164,7 @@ fastLEC::ret_vals fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xa
         }
 
         // Always output statistics, regardless of timeout
-        bool timed_out = timeout_detected || manager->hasTimeout() || manager->hasTermination();
+        bool timed_out = final_timeout;
         const char* timeout_status = timed_out ? " (TO)" : "";
         
         printf("c [BDD] result = %d, [nodes = %ld, vars = %d, reorderings = %d, memory = %ld bytes] [time = %f]%s \n", 
