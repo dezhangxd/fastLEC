@@ -11,9 +11,9 @@ extern "C"
 #include "../deps/kissat/src/kissat.h"
 }
 
-ret_vals fastLEC::Prove_Task::seq_sat_kissat()
+ret_vals fastLEC::Prover::seq_SAT_kissat(std::shared_ptr<fastLEC::CNF> cnf)
 {
-    if (!this->has_cnf())
+    if (!cnf)
     {
         fprintf(stderr, "c [CEC] Error: CNF not properly initialized\n");
         return ret_vals::ret_UNK;
@@ -24,18 +24,18 @@ ret_vals fastLEC::Prove_Task::seq_sat_kissat()
     auto solver = std::unique_ptr<kissat, decltype(&kissat_release)>(kissat_init(), kissat_release);
 
     int start_pos = 0, end_pos = 0;
-    for (int i = 0; i < this->cnf->num_clauses(); i++)
+    for (int i = 0; i < cnf->num_clauses(); i++)
     {
-        end_pos = this->cnf->cls_end_pos[i];
+        end_pos = cnf->cls_end_pos[i];
         for (int j = start_pos; j < end_pos; j++)
         {
-            kissat_add(solver.get(), this->cnf->lits[j]);
+            kissat_add(solver.get(), cnf->lits[j]);
         }
         kissat_add(solver.get(), 0);
         start_pos = end_pos;
     }
 
-    for (int al : this->cnf->assumptions)
+    for (int al : cnf->assumptions)
     {
         kissat_add(solver.get(), al);
         kissat_add(solver.get(), 0);
@@ -44,12 +44,11 @@ ret_vals fastLEC::Prove_Task::seq_sat_kissat()
     double time_resource = Param::get().timeout - fastLEC::ResMgr::get().get_runtime();
     std::function<void()> func = [solver_ptr = solver.get(), time_resource]()
     {
-        const double check_interval = 0.01;
-        double elapsed = 0.0;
-        while (elapsed < time_resource)
+        const double check_interval = 0.05;
+        auto start_time = std::chrono::high_resolution_clock::now();
+        while (std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::high_resolution_clock::now() - start_time).count() < time_resource)
         {
             std::this_thread::sleep_for(std::chrono::duration<double>(check_interval));
-            elapsed += check_interval;
         }
 
         if (solver_ptr != nullptr)
@@ -64,7 +63,7 @@ ret_vals fastLEC::Prove_Task::seq_sat_kissat()
     if (fastLEC::Param::get().verbose > 0)
     {
         printf("c [SAT] result = %d [var = %d, clause = %d, lit = %d] [time = %.2f]\n",
-               ret, this->cnf->num_vars, this->cnf->num_clauses(), this->cnf->num_lits(), fastLEC::ResMgr::get().get_runtime() - start_time);
+               ret, cnf->num_vars, cnf->num_clauses(), cnf->num_lits(), fastLEC::ResMgr::get().get_runtime() - start_time);
     }
 
     if (ret == 10) // SAT

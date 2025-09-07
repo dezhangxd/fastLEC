@@ -575,7 +575,7 @@ ret_vals fastLEC::Simulator::run_es()
     }
 }
 
-ret_vals fastLEC::Prove_Task::seq_es()
+ret_vals fastLEC::Prover::seq_ES(std::shared_ptr<fastLEC::XAG> xag)
 {
     fastLEC::Simulator simu(*xag);
 
@@ -816,7 +816,7 @@ fastLEC::ret_vals fastLEC::Simulator::run_round_pes(unsigned n_t)
         return ret_vals::ret_UNS;
 }
 
-fastLEC::ret_vals fastLEC::Prove_Task::para_es(int n_thread)
+fastLEC::ret_vals fastLEC::Prover::para_ES(std::shared_ptr<fastLEC::XAG> xag, int n_thread)
 {
     fastLEC::Simulator simu(*xag);
 
@@ -854,7 +854,7 @@ fastLEC::ret_vals fastLEC::Simulator::run_ges()
         return ret_vals::ret_UNK;
 }
 
-fastLEC::ret_vals fastLEC::Prove_Task::gpu_es()
+fastLEC::ret_vals fastLEC::Prover::gpu_ES(std::shared_ptr<fastLEC::XAG> xag)
 {
     remain_time = Param::get().timeout - ResMgr::get().get_runtime();
     fastLEC::Simulator simu(*xag);

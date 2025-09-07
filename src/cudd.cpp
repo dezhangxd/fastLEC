@@ -66,12 +66,12 @@ void write_dd(DdManager *gbm, DdNode *dd, char *filename)
     fclose(outfile); // close the file */
 }
 
-ret_vals fastLEC::Prove_Task::seq_bdd_cudd()
+fastLEC::ret_vals fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag)
 {
 
     double start_time = fastLEC::ResMgr::get().get_runtime();
 
-    if (this->has_xag() == false)
+    if (xag == nullptr)
     {
         printf("c [BDD] Error: XAG not found, returning UNKNOWN\n");
         return ret_vals::ret_UNK;

@@ -10,55 +10,67 @@
 namespace fastLEC
 {
 
-    class Prove_Task
+    class FormatManager
     {
-        std::unique_ptr<fastLEC::AIG> aig;
-        std::unique_ptr<fastLEC::XAG> xag;
-        std::unique_ptr<fastLEC::CNF> cnf;
-
+    private:
+        std::shared_ptr<fastLEC::AIG> aig;
+        std::shared_ptr<fastLEC::XAG> xag;
+        std::shared_ptr<fastLEC::CNF> cnf;
+        
     public:
-        Prove_Task() = default;
-        ~Prove_Task() = default;
-
-        Prove_Task(const Prove_Task &) = delete;
-        Prove_Task &operator=(const Prove_Task &) = delete;
-
-        Prove_Task(Prove_Task &&) = default;
-        Prove_Task &operator=(Prove_Task &&) = default;
-
-        const fastLEC::AIG &get_aig() const { return *aig; }
-        const fastLEC::XAG &get_xag() const { return *xag; }
-        const fastLEC::CNF &get_cnf() const { return *cnf; }
-
-        fastLEC::AIG &get_aig() { return *aig; }
-        fastLEC::XAG &get_xag() { return *xag; }
-        fastLEC::CNF &get_cnf() { return *cnf; }
-
+        FormatManager() = default;
+        ~FormatManager() = default;
+        
+        // Setter methods - receive shared_ptr objects
+        void set_aig(std::shared_ptr<fastLEC::AIG> aig_ptr);
+        void set_xag(std::shared_ptr<fastLEC::XAG> xag_ptr);
+        void set_cnf(std::shared_ptr<fastLEC::CNF> cnf_ptr);
+        
+        // Format conversion methods
+        bool aig_to_xag();
+        bool aig_to_cnf();
+        bool xag_to_cnf();
+        bool xag_to_aig();  // if reverse conversion is needed
+        bool cnf_to_xag();  // if reverse conversion is needed
+        
+        // Access methods
+        const fastLEC::AIG* get_aig() const { return aig.get(); }
+        const fastLEC::XAG* get_xag() const { return xag.get(); }
+        const fastLEC::CNF* get_cnf() const { return cnf.get(); }
+        
+        fastLEC::AIG* get_aig() { return aig.get(); }
+        fastLEC::XAG* get_xag() { return xag.get(); }
+        fastLEC::CNF* get_cnf() { return cnf.get(); }
+        
+        // Status checking
         bool has_aig() const { return aig != nullptr; }
         bool has_xag() const { return xag != nullptr; }
         bool has_cnf() const { return cnf != nullptr; }
-
-        // Setter methods
-        void set_aig(std::unique_ptr<fastLEC::AIG> aig_ptr) { aig = std::move(aig_ptr); }
-        void set_xag(std::unique_ptr<fastLEC::XAG> xag_ptr) { xag = std::move(xag_ptr); }
-        void set_cnf(std::unique_ptr<fastLEC::CNF> cnf_ptr) { cnf = std::move(cnf_ptr); }
-
-        // construct XAG or CNF from AIG
-        bool build_xag();
-        bool build_cnf();
-
-        // CEC engine
-        ret_vals seq_sat_kissat(); // call kissat
-        ret_vals seq_es();         // call ES
-        ret_vals seq_bdd_cudd();   // call cudd
-
-        ret_vals para_es(int n_thread = 1); // call para-es engine
-        ret_vals gpu_es();              // call gpu-es engine
+        
+        // Resource management
+        void clear_aig();
+        void clear_xag();
+        void clear_cnf();
+        void clear_all();
+        
+        // Utility methods
+        void print_status() const;
+        std::string get_format_info() const;
+        
+        // Convenience methods for common workflows
+        bool load_aig_and_convert_to_xag(const std::string &filename);
+        bool load_aig_and_convert_to_cnf(const std::string &filename);
+        
+        // Get shared_ptr methods (for sharing ownership)
+        std::shared_ptr<fastLEC::AIG> get_aig_shared() { return aig; }
+        std::shared_ptr<fastLEC::XAG> get_xag_shared() { return xag; }
+        std::shared_ptr<fastLEC::CNF> get_cnf_shared() { return cnf; }
     };
 
     class Prover
     {
-        std::unique_ptr<fastLEC::Prove_Task> main_task;
+    private:
+        std::shared_ptr<fastLEC::AIG> aig;
 
     public:
         Prover() = default;
@@ -67,6 +79,14 @@ namespace fastLEC
         //---------------------------------------------------
         // read aiger filename from Param if filename = ""
         bool read_aiger(const std::string &filename = "");
+
+        //---------------------------------------------------
+        fastLEC::ret_vals fast_aig_check(std::shared_ptr<fastLEC::AIG> aig);
+        fastLEC::ret_vals seq_SAT_kissat(std::shared_ptr<fastLEC::CNF> cnf);
+        fastLEC::ret_vals seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag);
+        fastLEC::ret_vals seq_ES(std::shared_ptr<fastLEC::XAG> xag);
+        fastLEC::ret_vals para_ES(std::shared_ptr<fastLEC::XAG> xag, int n_thread = 1);
+        fastLEC::ret_vals gpu_ES(std::shared_ptr<fastLEC::XAG> xag);
 
         //---------------------------------------------------
         // CEC check
