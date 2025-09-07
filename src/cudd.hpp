@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <sys/stat.h>
 
+
 extern "C"
 {
 #include "../deps/cudd/config.h"
@@ -83,6 +84,21 @@ namespace fastLEC
         int readSize() { return Cudd_ReadSize(manager_); }
         int readReorderings() { return Cudd_ReadReorderings(manager_); }
         long readMemoryInUse() { return Cudd_ReadMemoryInUse(manager_); }
+        
+        // Timeout management
+        void setTimeLimit(unsigned long timeLimit) { Cudd_SetTimeLimit(manager_, timeLimit); }
+        void setStartTime(unsigned long startTime) { Cudd_SetStartTime(manager_, startTime); }
+        void resetStartTime() { Cudd_ResetStartTime(manager_); }
+        unsigned long readTimeLimit() { return Cudd_ReadTimeLimit(manager_); }
+        unsigned long readElapsedTime() { return Cudd_ReadElapsedTime(manager_); }
+        unsigned long readStartTime() { return Cudd_ReadStartTime(manager_); }
+        
+        // Error checking
+        int readErrorCode() { return Cudd_ReadErrorCode(manager_); }
+        void clearErrorCode() { Cudd_ClearErrorCode(manager_); }
+        bool hasTimeout() { return readErrorCode() == CUDD_TIMEOUT_EXPIRED; }
+        bool hasTermination() { return readErrorCode() == CUDD_TERMINATION; }
+        bool hasTooManyNodes() { return readErrorCode() == CUDD_TOO_MANY_NODES; }
         
         void printDebug(DdNode* dd, int n, int pr) { Cudd_PrintDebug(manager_, dd, n, pr); }
         void dumpDot(int n, DdNode** dd, char** inames, char** onames, FILE* fp) 
@@ -197,7 +213,16 @@ namespace fastLEC
             if (!manager_ || !other.manager_ || manager_ != other.manager_) {
                 throw std::runtime_error("BDD operations require same manager");
             }
-            return BDD(manager_->bddAnd(node_, other.node_), manager_);
+            DdNode* result = manager_->bddAnd(node_, other.node_);
+            if (result == nullptr) {
+                // Check for timeout or other errors - return empty BDD instead of throwing
+                if (manager_->hasTimeout() || manager_->hasTooManyNodes()) {
+                    return BDD(); // Return empty BDD to indicate timeout/error
+                } else {
+                    throw std::runtime_error("BDD operation failed");
+                }
+            }
+            return BDD(result, manager_);
         }
         
         BDD operator^(const BDD& other) const
@@ -205,7 +230,16 @@ namespace fastLEC
             if (!manager_ || !other.manager_ || manager_ != other.manager_) {
                 throw std::runtime_error("BDD operations require same manager");
             }
-            return BDD(manager_->bddXor(node_, other.node_), manager_);
+            DdNode* result = manager_->bddXor(node_, other.node_);
+            if (result == nullptr) {
+                // Check for timeout or other errors - return empty BDD instead of throwing
+                if (manager_->hasTimeout() || manager_->hasTooManyNodes()) {
+                    return BDD(); // Return empty BDD to indicate timeout/error
+                } else {
+                    throw std::runtime_error("BDD operation failed");
+                }
+            }
+            return BDD(result, manager_);
         }
         
         BDD operator|(const BDD& other) const
@@ -213,7 +247,16 @@ namespace fastLEC
             if (!manager_ || !other.manager_ || manager_ != other.manager_) {
                 throw std::runtime_error("BDD operations require same manager");
             }
-            return BDD(manager_->bddOr(node_, other.node_), manager_);
+            DdNode* result = manager_->bddOr(node_, other.node_);
+            if (result == nullptr) {
+                // Check for timeout or other errors - return empty BDD instead of throwing
+                if (manager_->hasTimeout() || manager_->hasTooManyNodes()) {
+                    return BDD(); // Return empty BDD to indicate timeout/error
+                } else {
+                    throw std::runtime_error("BDD operation failed");
+                }
+            }
+            return BDD(result, manager_);
         }
         
         BDD operator!() const
@@ -221,7 +264,16 @@ namespace fastLEC
             if (!manager_) {
                 throw std::runtime_error("BDD operations require manager");
             }
-            return BDD(manager_->bddNot(node_), manager_);
+            DdNode* result = manager_->bddNot(node_);
+            if (result == nullptr) {
+                // Check for timeout or other errors - return empty BDD instead of throwing
+                if (manager_->hasTimeout() || manager_->hasTooManyNodes()) {
+                    return BDD(); // Return empty BDD to indicate timeout/error
+                } else {
+                    throw std::runtime_error("BDD operation failed");
+                }
+            }
+            return BDD(result, manager_);
         }
         
         // Comparison operators
@@ -261,7 +313,16 @@ namespace fastLEC
         
         static BDD createVar(std::shared_ptr<CuddManager> manager)
         {
-            return BDD(manager->bddNewVar(), manager);
+            DdNode* result = manager->bddNewVar();
+            if (result == nullptr) {
+                // Check for timeout or other errors - return empty BDD instead of throwing
+                if (manager->hasTimeout() || manager->hasTooManyNodes()) {
+                    return BDD(); // Return empty BDD to indicate timeout/error
+                } else {
+                    throw std::runtime_error("BDD variable creation failed");
+                }
+            }
+            return BDD(result, manager);
         }
     };
     

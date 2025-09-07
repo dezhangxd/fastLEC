@@ -87,15 +87,15 @@ namespace fastLEC
 #define USER_PARAM(param_name, type, default_val, description)            \
     if (name == #param_name)                                              \
     {                                                                     \
-        if constexpr (std::is_same_v<type, bool>)                         \
+        if constexpr (std::is_same<type, bool>::value)                         \
         {                                                                 \
             custom_params.param_name = (value == "true" || value == "1"); \
         }                                                                 \
-        else if constexpr (std::is_same_v<type, int>)                     \
+        else if constexpr (std::is_same<type, int>::value)                     \
         {                                                                 \
             custom_params.param_name = std::stoi(value);                  \
         }                                                                 \
-        else if constexpr (std::is_same_v<type, double>)                  \
+        else if constexpr (std::is_same<type, double>::value)                  \
         {                                                                 \
             custom_params.param_name = std::stod(value);                  \
         }                                                                 \
@@ -142,15 +142,15 @@ namespace fastLEC
                 printf("c Custom Parameters:\n");
 #define USER_PARAM(param_name, type, default_val, description)     \
     printf("c     %-20s %s [default: ", #param_name, description); \
-    if constexpr (std::is_same_v<type, bool>)                      \
+    if constexpr (std::is_same<type, bool>::value)                      \
     {                                                              \
         printf("%s", static_cast<bool>(default_val) ? "true" : "false"); \
     }                                                              \
-    else if constexpr (std::is_same_v<type, int>)                  \
+    else if constexpr (std::is_same<type, int>::value)                  \
     {                                                              \
         printf("%d", static_cast<int>(default_val));               \
     }                                                              \
-    else if constexpr (std::is_same_v<type, double>)               \
+    else if constexpr (std::is_same<type, double>::value)               \
     {                                                              \
         printf("%g", static_cast<double>(default_val));            \
     }                                                              \
@@ -281,15 +281,15 @@ namespace fastLEC
 #define USER_PARAM(param_name, type, default_val, description)                                                \
     if (p.custom_params.param_name != default_val)                                                            \
     {                                                                                                         \
-        if constexpr (std::is_same_v<type, bool>)                                                             \
+        if constexpr (std::is_same<type, bool>::value)                                                             \
         {                                                                                                     \
             printf("c [parser] usr:%s = %s\n", #param_name, p.custom_params.param_name ? "true" : "false");   \
         }                                                                                                     \
-        else if constexpr (std::is_same_v<type, int>)                                                         \
+        else if constexpr (std::is_same<type, int>::value)                                                         \
         {                                                                                                     \
             printf("c [parser] usr:%s = %d\n", #param_name, static_cast<int>(p.custom_params.param_name));    \
         }                                                                                                     \
-        else if constexpr (std::is_same_v<type, double>)                                                      \
+        else if constexpr (std::is_same<type, double>::value)                                                      \
         {                                                                                                     \
             printf("c [parser] usr:%s = %g\n", #param_name, static_cast<double>(p.custom_params.param_name)); \
         }                                                                                                     \
