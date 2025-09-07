@@ -130,8 +130,10 @@ bool AIG::construct(const std::string &filename)
     rewrite();
 
     if (fastLEC::Param::get().verbose > 0)
+    {
         printf("c [AIG] successfully load AIGER file with MILOA: %u %u %u %u %u\n", aig->maxvar, aig->num_inputs, aig->num_latches, aig->num_outputs, aig->num_ands);
-
+        fflush(stdout);
+    }
     return true;
 }
 

@@ -21,7 +21,7 @@ ret_vals fastLEC::Prover::seq_SAT_kissat(std::shared_ptr<fastLEC::CNF> cnf)
 
     double start_time = fastLEC::ResMgr::get().get_runtime();
 
-    auto solver = std::unique_ptr<kissat, decltype(&kissat_release)>(kissat_init(), kissat_release);
+    auto solver = std::shared_ptr<kissat>(kissat_init(), kissat_release);
 
     int start_pos = 0, end_pos = 0;
     for (int i = 0; i < cnf->num_clauses(); i++)
@@ -42,7 +42,8 @@ ret_vals fastLEC::Prover::seq_SAT_kissat(std::shared_ptr<fastLEC::CNF> cnf)
     }
 
     double time_resource = Param::get().timeout - fastLEC::ResMgr::get().get_runtime();
-    std::function<void()> func = [solver_ptr = solver.get(), time_resource]()
+    
+    std::function<void()> func = [solver, time_resource]()
     {
         const double check_interval = 0.05;
         auto start_time = std::chrono::high_resolution_clock::now();
@@ -50,9 +51,9 @@ ret_vals fastLEC::Prover::seq_SAT_kissat(std::shared_ptr<fastLEC::CNF> cnf)
         {
             std::this_thread::sleep_for(std::chrono::duration<double>(check_interval));
         }
-
-        if (solver_ptr != nullptr)
-            kissat_terminate(solver_ptr);
+        
+        if (solver)
+            kissat_terminate(solver.get());
     };
 
     std::thread t(func);
@@ -66,10 +67,5 @@ ret_vals fastLEC::Prover::seq_SAT_kissat(std::shared_ptr<fastLEC::CNF> cnf)
                ret, cnf->num_vars, cnf->num_clauses(), cnf->num_lits(), fastLEC::ResMgr::get().get_runtime() - start_time);
     }
 
-    if (ret == 10) // SAT
-        return ret_vals::ret_SAT;
-    else if (ret == 20) // UNSAT
-        return ret_vals::ret_UNS;
-    else // UNKNOWN or other
-        return ret_vals::ret_UNK;
+    return ret_vals(ret);
 }

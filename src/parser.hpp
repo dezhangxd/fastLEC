@@ -298,6 +298,7 @@ namespace fastLEC
 #undef USER_PARAM
 
                 printf("c ------------------------------------------------------------\n");
+                fflush(stdout);
             }
 
             return true;

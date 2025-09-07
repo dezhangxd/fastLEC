@@ -47,8 +47,11 @@ bool Prover::read_aiger(const std::string &filename)
     }
 
     if (Param::get().verbose > 0)
-        printf("c [Prover] read AIGER file in %f seconds\n", fastLEC::ResMgr::get().get_runtime() - start_time);
-
+    {
+        printf("c [Prover] load AIGER file in %f seconds\n", fastLEC::ResMgr::get().get_runtime() - start_time);
+        printf("c ------------------------------------------------------------\n");
+        fflush(stdout);
+    }
     return true;
 }
 
@@ -56,7 +59,10 @@ fastLEC::ret_vals Prover::check_cec()
 {
     double start_time = fastLEC::ResMgr::get().get_runtime();
     if (Param::get().verbose > 0)
+    {
         printf("c [CEC] Starting CEC check...\n");
+        fflush(stdout);
+    }
 
     ret_vals ret = ret_vals::ret_UNK;
     ret = fast_aig_check(aig);
@@ -96,56 +102,40 @@ fastLEC::ret_vals Prover::check_cec()
     //         ret = main_task->gpu_es();
     // }
 
-    if (Param::get().verbose > 0)
+    if (Param::get().verbose > 0){
         printf("c [CEC] CEC check completed in %f seconds\n", fastLEC::ResMgr::get().get_runtime() - start_time);
-
+        printf("c ------------------------------------------------------------\n");
+        fflush(stdout);
+    }
     return ret;
 }
 
 // FormatManager implementation
 void FormatManager::set_aig(std::shared_ptr<fastLEC::AIG> aig_ptr)
 {
-    if (fastLEC::Param::get().verbose > 0)
-        printf("c [FormatManager] Setting AIG object\n");
-    
     // Clear existing AIG if any
     clear_aig();
     
     // Assign the new AIG object
     aig = aig_ptr;
-    
-    if (fastLEC::Param::get().verbose > 0)
-        printf("c [FormatManager] AIG object set successfully\n");
 }
 
 void FormatManager::set_xag(std::shared_ptr<fastLEC::XAG> xag_ptr)
 {
-    if (fastLEC::Param::get().verbose > 0)
-        printf("c [FormatManager] Setting XAG object\n");
-    
     // Clear existing XAG if any
     clear_xag();
     
     // Assign the new XAG object
     xag = xag_ptr;
-    
-    if (fastLEC::Param::get().verbose > 0)
-        printf("c [FormatManager] XAG object set successfully\n");
 }
 
 void FormatManager::set_cnf(std::shared_ptr<fastLEC::CNF> cnf_ptr)
 {
-    if (fastLEC::Param::get().verbose > 0)
-        printf("c [FormatManager] Setting CNF object\n");
-    
     // Clear existing CNF if any
     clear_cnf();
     
     // Assign the new CNF object
     cnf = cnf_ptr;
-    
-    if (fastLEC::Param::get().verbose > 0)
-        printf("c [FormatManager] CNF object set successfully\n");
 }
 
 bool FormatManager::aig_to_xag()
@@ -156,17 +146,11 @@ bool FormatManager::aig_to_xag()
         return false;
     }
     
-    if (fastLEC::Param::get().verbose > 0)
-        printf("c [FormatManager] Converting AIG to XAG...\n");
-    
     // Clear existing XAG if any
     clear_xag();
     
     // Create XAG from AIG
     xag = std::make_shared<fastLEC::XAG>(*aig);
-    
-    if (fastLEC::Param::get().verbose > 0)
-        printf("c [FormatManager] AIG to XAG conversion completed\n");
     
     return true;
 }
@@ -178,9 +162,6 @@ bool FormatManager::aig_to_cnf()
         fprintf(stderr, "c [FormatManager] No AIG available for conversion to CNF\n");
         return false;
     }
-    
-    if (fastLEC::Param::get().verbose > 0)
-        printf("c [FormatManager] Converting AIG to CNF...\n");
     
     // First convert AIG to XAG, then XAG to CNF
     if (!aig_to_xag())
@@ -195,9 +176,6 @@ bool FormatManager::aig_to_cnf()
         return false;
     }
     
-    if (fastLEC::Param::get().verbose > 0)
-        printf("c [FormatManager] AIG to CNF conversion completed\n");
-    
     return true;
 }
 
@@ -209,17 +187,11 @@ bool FormatManager::xag_to_cnf()
         return false;
     }
     
-    if (fastLEC::Param::get().verbose > 0)
-        printf("c [FormatManager] Converting XAG to CNF...\n");
-    
     // Clear existing CNF if any
     clear_cnf();
     
     // Create CNF from XAG
     cnf = xag->construct_cnf_from_this_xag();
-    
-    if (fastLEC::Param::get().verbose > 0)
-        printf("c [FormatManager] XAG to CNF conversion completed\n");
     
     return true;
 }
@@ -244,8 +216,6 @@ void FormatManager::clear_aig()
 {
     if (aig)
     {
-        if (fastLEC::Param::get().verbose > 1)
-            printf("c [FormatManager] Clearing AIG\n");
         aig.reset();
     }
 }
@@ -254,8 +224,6 @@ void FormatManager::clear_xag()
 {
     if (xag)
     {
-        if (fastLEC::Param::get().verbose > 1)
-            printf("c [FormatManager] Clearing XAG\n");
         xag.reset();
     }
 }
@@ -264,17 +232,12 @@ void FormatManager::clear_cnf()
 {
     if (cnf)
     {
-        if (fastLEC::Param::get().verbose > 1)
-            printf("c [FormatManager] Clearing CNF\n");
         cnf.reset();
     }
 }
 
 void FormatManager::clear_all()
 {
-    if (fastLEC::Param::get().verbose > 0)
-        printf("c [FormatManager] Clearing all formats\n");
-    
     clear_aig();
     clear_xag();
     clear_cnf();
@@ -324,9 +287,6 @@ std::string FormatManager::get_format_info() const
 
 bool FormatManager::load_aig_and_convert_to_xag(const std::string &filename)
 {
-    if (fastLEC::Param::get().verbose > 0)
-        printf("c [FormatManager] Loading AIG from file and converting to XAG: %s\n", filename.c_str());
-    
     // Create AIG object and load from file
     auto aig_ptr = std::make_shared<fastLEC::AIG>();
     if (!aig_ptr->construct(filename))
@@ -342,9 +302,6 @@ bool FormatManager::load_aig_and_convert_to_xag(const std::string &filename)
 
 bool FormatManager::load_aig_and_convert_to_cnf(const std::string &filename)
 {
-    if (fastLEC::Param::get().verbose > 0)
-        printf("c [FormatManager] Loading AIG from file and converting to CNF: %s\n", filename.c_str());
-    
     // Create AIG object and load from file
     auto aig_ptr = std::make_shared<fastLEC::AIG>();
     if (!aig_ptr->construct(filename))
