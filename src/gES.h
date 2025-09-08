@@ -9,7 +9,7 @@ extern "C"
 #endif
 
     // Instruction Simulator
-    typedef uint64_t bvec_t; // 64-bit bit-vector for cu 
+    typedef uint64_t bvec_t;  // 64-bit bit-vector for cu
     typedef uint32_t bvec_ts; // 32-bit bit-vector for cu
     extern bvec_t festivals[6];
     extern bvec_ts festivals_s[5];
@@ -23,8 +23,10 @@ extern "C"
     // the operation type
     typedef enum op_type
     {
-        OP_AND, // OP_AND addr1 addr2 addr3 : mem[addr1] <- mem[addr2] & mem[addr3]
-        OP_XOR, // OP_XOR addr1 addr2 addr3 : mem[addr1] <- mem[addr2] ^ mem[addr3]
+        OP_AND, // OP_AND addr1 addr2 addr3 : mem[addr1] <- mem[addr2] &
+                // mem[addr3]
+        OP_XOR, // OP_XOR addr1 addr2 addr3 : mem[addr1] <- mem[addr2] ^
+                // mem[addr3]
         OP_NOT, // OP_NOT addr1 addr2 : mem[addr1] <- ~mem[addr2]
     } op_type;
 
