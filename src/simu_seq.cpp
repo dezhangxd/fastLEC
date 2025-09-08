@@ -381,7 +381,7 @@ fastLEC::ret_vals fastLEC::ISimulator::run_ies()
 
         if (Param::get().verbose > 1 && r % 1000000 == 0)
         {
-            printf("c [iES] %6.2f%% : round %lld / %llu \n",
+            printf("c [iES(_bv64)] %6.2f%% : round %lld / %llu \n",
                    (double)r / round_num * 100,
                    r,
                    round_num);
@@ -403,6 +403,11 @@ ret_vals fastLEC::Simulator::run_ies()
     is = std::make_unique<fastLEC::ISimulator>();
     is->init_glob_ES(xag);
 
+    unsigned mem_cost = 0;
+    mem_cost += (is->glob_es.mem_sz) * sizeof(bvec_t);
+    mem_cost += sizeof(unsigned) * 3;
+    mem_cost += sizeof(operation *);
+
     fastLEC::ret_vals ret = ret_vals::ret_UNS;
 
     if (Param::get().custom_params.ies_u64)
@@ -413,11 +418,6 @@ ret_vals fastLEC::Simulator::run_ies()
             ? is->glob_es.PI_num - this->bv_bits
             : 0;
         ret = is->run_ies();
-
-        unsigned mem_cost = 0;
-        mem_cost += (is->glob_es.mem_sz) * sizeof(bvec_t);
-        mem_cost += sizeof(unsigned) * 3;
-        mem_cost += sizeof(operation *);
 
         printf("c [iES(_bv64)] result = %d [bv:para:batch=%d:%d:%d] [bv_w = 6] "
                "[nGates = %5lu] [nPI = %3lu] [Mem = %u bytes] [n_ops = %u] "
@@ -431,6 +431,7 @@ ret_vals fastLEC::Simulator::run_ies()
                mem_cost,
                is->glob_es.n_ops,
                ResMgr::get().get_runtime() - start_time);
+        fflush(stdout);
     }
     else
     {
@@ -498,22 +499,22 @@ ret_vals fastLEC::Simulator::run_ies()
                 break;
             }
         }
+
+        printf("c [iES] result = %d [bv:para:batch=%d:%d:%d] [bv_w = %d] "
+               "[nGates = %5lu] [nPI = %3lu] [Mem = %u bytes] [n_ops = %u] "
+               "[time = %.2f]\n",
+               ret,
+               this->bv_bits,
+               this->para_bits,
+               this->batch_bits,
+               Param::get().custom_params.es_bv_bits,
+               xag.used_gates.size(),
+               xag.PI.size(),
+               mem_cost,
+               is->glob_es.n_ops,
+               ResMgr::get().get_runtime() - start_time);
     }
 
-    //  printf("c [iES] result = %d [bv:para:batch=%d:%d:%d] [bv_w = %3d]
-    //  [nGates "
-    //        "= %5lu] [nPI = %3lu] [num_bv = %u] [time = %.2f]\n",
-    //        ret,
-    //        this->bv_bits,
-    //        this->para_bits,
-    //        this->batch_bits,
-    //        Param::get().custom_params.es_bv_bits,
-    //        xag.used_gates.size(),
-    //        xag.PI.size(),
-    //        is->glob_es.mem_sz,
-    //        ResMgr::get().get_runtime() - start_time);
-
-    //
     return ret;
 }
 
