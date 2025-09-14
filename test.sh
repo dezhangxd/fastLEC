@@ -1,12 +1,13 @@
 clear;
 clear;
 
+./build.sh
 
 BUILD_DIR="build"
 
 # ulimit -t 5
 
-command="-m ES -c 1 -v 2 -t 5 -p use_ies 1 -p ies_u64 0"
+command="-m pES -c 1 -v 2 -t 5"
 
 ./${BUILD_DIR}/bin/fastLEC -i ../ins/miter_right/bit2/mul2o2.aig $command |gnomon
 # ./${BUILD_DIR}/bin/fastLEC -i ../ins/miter_right/bit5/mul5o5.aig $command |gnomon

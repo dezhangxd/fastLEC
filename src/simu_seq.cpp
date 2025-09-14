@@ -637,13 +637,15 @@ ret_vals fastLEC::Prover::seq_ES(std::shared_ptr<fastLEC::XAG> xag)
     fastLEC::Simulator simu(*xag);
 
     ret_vals ret = ret_vals::ret_UNK;
+    // default use_ies = true
     if (Param::get().custom_params.use_ies)
     {
+        // defualt using long bit-vector version, ies_u64 = false
         ret = simu.run_ies();
     }
     else
     {
-        ret = simu.run_es();
+        ret = simu.run_es(); // default using 
     }
     return ret;
 }
