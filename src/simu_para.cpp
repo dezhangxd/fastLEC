@@ -4,35 +4,42 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstdio>
 #include <cstring>
 #include <thread>
 #include <atomic>
 
 using namespace fastLEC;
 
-unsigned fastLEC::Simulator::cal_pes_threads(unsigned n_thread)
+unsigned fastLEC::Simulator::cal_pes_threads(unsigned n_t)
 {
-    if (n_thread <= 0)
+    if (n_t <= 0)
         return 0;
-    unsigned para_bits = log2(n_thread);
+    unsigned para_bits = log2(n_t);
     return 1 << para_bits;
 }
 
 fastLEC::ret_vals fastLEC::Simulator::run_pbits_pes(unsigned n_t)
 {
     double start_time = ResMgr::get().get_runtime();
-    assert(is == nullptr);
-    is = std::make_unique<fastLEC::ISimulator>();
-    is->init_glob_ES(xag);
+    if (is == nullptr)
+    {
+        is = std::make_unique<fastLEC::ISimulator>();
+        is->init_glob_ES(xag);
+    }
 
     cal_es_bits(n_t);
 
     std::vector<std::thread> threads;
     std::atomic<bool> found_sat(false);
+    std::atomic<unsigned long long> found_sat_round(0);
     std::atomic<bool> cutted(false);
+
+    double time_resources = Param::get().timeout - ResMgr::get().get_runtime();
 
     auto worker = [&](uint64_t para_idx)
     {
+        auto st = std::chrono::high_resolution_clock::now();
         std::vector<BitVector> loc_mem(is->glob_es.mem_sz,
                                        BitVector(1 << this->bv_bits));
 
@@ -48,6 +55,15 @@ fastLEC::ret_vals fastLEC::Simulator::run_pbits_pes(unsigned n_t)
                        round_num);
                 fflush(stdout);
             }
+            if (round % 100 == 0 &&
+                std::chrono::duration_cast<std::chrono::duration<double>>(
+                    std::chrono::high_resolution_clock::now() - st)
+                        .count() > time_resources)
+            {
+                cutted.store(true);
+                return;
+            }
+
             loc_mem[0].reset();
             loc_mem[1].set();
 
@@ -90,7 +106,8 @@ fastLEC::ret_vals fastLEC::Simulator::run_pbits_pes(unsigned n_t)
             if (loc_mem[is->glob_es.PO_lit].has_one())
             {
                 found_sat.store(true);
-                break;
+                found_sat_round.store(round);
+                return;
             }
         }
     };
@@ -106,7 +123,7 @@ fastLEC::ret_vals fastLEC::Simulator::run_pbits_pes(unsigned n_t)
     }
     catch (const std::exception &e)
     {
-        printf("c [pEPS] exception: %s\n", e.what());
+        printf("c [piEPS(pbits)] exception: %s\n", e.what());
     }
 
     int res = 0;
@@ -118,17 +135,17 @@ fastLEC::ret_vals fastLEC::Simulator::run_pbits_pes(unsigned n_t)
             res = 20;
     }
 
-    printf("c [piES] result = %d [bv:para:batch=%d:%d:%d] [bv_w = %3d] [nGates "
-           "= %5lu] [nPI = %3lu] [num_bv = %u] [time = %.2f]\n",
+    printf("c [piES] result = %d [bv:pbits=%d:%d] [bv_w = %3d]"
+           " [nGates = %5lu] [nPI = %3lu] [nBV = %u /t.] [time = %.2f]\n",
            res,
            this->bv_bits,
-           this->para_bits,
            this->batch_bits,
            Param::get().custom_params.es_bv_bits,
            xag.used_gates.size(),
            xag.PI.size(),
            is->glob_es.mem_sz,
            ResMgr::get().get_runtime() - start_time);
+    fflush(stdout);
 
     return ret_vals(res);
 }
@@ -237,7 +254,7 @@ fastLEC::ret_vals fastLEC::Simulator::run_round_pes(unsigned n_t)
     }
     catch (const std::exception &e)
     {
-        printf("c [pEPS] exception: %s\n", e.what());
+        printf("c [piEPS(round)] exception: %s\n", e.what());
     }
 
     int res = 0;
@@ -269,19 +286,19 @@ fastLEC::ret_vals fastLEC::Simulator::run_round_pes(unsigned n_t)
 // ---------------------------------------------------
 
 fastLEC::ret_vals fastLEC::Prover::para_ES(std::shared_ptr<fastLEC::XAG> xag,
-                                           int n_thread)
+                                           int n_t)
 {
     fastLEC::Simulator simu(*xag);
 
     // default use_pes_pbit = false
     if (Param::get().custom_params.use_pes_pbit)
     {
-        int n_t = simu.cal_pes_threads(n_thread);
-        return simu.run_pbits_pes(n_t);
+        int t = simu.cal_pes_threads(n_t);
+        return simu.run_pbits_pes(t);
     }
     else
     {
-        return simu.run_round_pes(n_thread);
+        return simu.run_round_pes(n_t);
     }
 
     return ret_vals::ret_UNK;

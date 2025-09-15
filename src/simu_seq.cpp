@@ -399,9 +399,11 @@ ret_vals fastLEC::Simulator::run_ies()
 {
     double start_time = ResMgr::get().get_runtime();
 
-    assert(is == nullptr);
-    is = std::make_unique<fastLEC::ISimulator>();
-    is->init_glob_ES(xag);
+    if (is == nullptr)
+    {
+        is = std::make_unique<fastLEC::ISimulator>();
+        is->init_glob_ES(xag);
+    }
 
     unsigned mem_cost = 0;
     mem_cost += (is->glob_es.mem_sz) * sizeof(bvec_t);
