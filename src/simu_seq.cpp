@@ -6,8 +6,6 @@
 #include <algorithm>
 #include <cassert>
 #include <cstring>
-#include <thread>
-#include <atomic>
 
 using namespace fastLEC;
 
