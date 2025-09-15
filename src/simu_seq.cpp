@@ -594,8 +594,8 @@ ret_vals fastLEC::Simulator::run_es()
         }
     }
 
-    printf("c [EPS] result = %d [bv:para:batch=%d:%d:%d] [bv_w = %3d] [nGates "
-           "= %5lu] [nPI = %3lu] [round = %llu] [time = %.2f]\n",
+    printf("c [EPS] result = %d [bv:para:batch=%d:%d:%d] [bv_w = %3d]"
+           "[nGates = %5lu] [nPI = %3lu] [round = %llu] [time = %.2f]\n",
            ret,
            this->bv_bits,
            this->para_bits,
