@@ -419,12 +419,11 @@ ret_vals fastLEC::Simulator::run_ies()
             : 0;
         ret = is->run_ies();
 
-        printf("c [iES(_bv64)] result = %d [bv:para:batch=%d:%d:%d] [bv_w = 6] "
+        printf("c [iES(_bv64)] result = %d [bv:batch=%d:%d] [bv_w = 6] "
                "[nGates = %5lu] [nPI = %3lu] [Mem = %u bytes] [n_ops = %u] "
                "[time = %.2f]\n",
                ret,
                this->bv_bits,
-               this->para_bits,
                this->batch_bits,
                xag.used_gates.size(),
                xag.PI.size(),
@@ -500,12 +499,11 @@ ret_vals fastLEC::Simulator::run_ies()
             }
         }
 
-        printf("c [iES] result = %d [bv:para:batch=%d:%d:%d] [bv_w = %d] "
+        printf("c [iES] result = %d [bv:batch=%d:%d] [bv_w = %d] "
                "[nGates = %5lu] [nPI = %3lu] [Mem = %u bytes] [n_ops = %u] "
                "[time = %.2f]\n",
                ret,
                this->bv_bits,
-               this->para_bits,
                this->batch_bits,
                Param::get().custom_params.es_bv_bits,
                xag.used_gates.size(),
@@ -645,7 +643,7 @@ ret_vals fastLEC::Prover::seq_ES(std::shared_ptr<fastLEC::XAG> xag)
     }
     else
     {
-        ret = simu.run_es(); // default using 
+        ret = simu.run_es(); // default using
     }
     return ret;
 }

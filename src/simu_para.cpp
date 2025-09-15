@@ -10,9 +10,6 @@
 
 using namespace fastLEC;
 
-
-
-
 unsigned fastLEC::Simulator::cal_pes_threads(unsigned n_thread)
 {
     if (n_thread <= 0)
@@ -36,14 +33,19 @@ fastLEC::ret_vals fastLEC::Simulator::run_pbits_pes(unsigned n_t)
 
     auto worker = [&](uint64_t para_idx)
     {
-        std::vector<BitVector> loc_mem(is->glob_es.mem_sz, BitVector(1 << this->bv_bits));
+        std::vector<BitVector> loc_mem(is->glob_es.mem_sz,
+                                       BitVector(1 << this->bv_bits));
 
         unsigned long long round_num = 1llu << batch_bits;
         unsigned long long round = 0;
         for (; round < round_num; round++)
         {
-            if (Param::get().verbose > 1 && round % 1000 == 0 && para_idx == 0){
-                printf("c [iES] %6.2f%% : round %lld / %llu \n", (double)round / round_num * 100, round, round_num);
+            if (Param::get().verbose > 1 && round % 1000 == 0 && para_idx == 0)
+            {
+                printf("c [iES] %6.2f%% : round %lld / %llu \n",
+                       (double)round / round_num * 100,
+                       round,
+                       round_num);
                 fflush(stdout);
             }
             loc_mem[0].reset();
@@ -76,9 +78,11 @@ fastLEC::ret_vals fastLEC::Simulator::run_pbits_pes(unsigned n_t)
                 operation *op = &is->glob_es.ops[i];
 
                 if (op->type == OP_AND)
-                    loc_mem[op->addr1] = loc_mem[op->addr2] & loc_mem[op->addr3];
+                    loc_mem[op->addr1] =
+                        loc_mem[op->addr2] & loc_mem[op->addr3];
                 else if (op->type == OP_XOR)
-                    loc_mem[op->addr1] = loc_mem[op->addr2] ^ loc_mem[op->addr3];
+                    loc_mem[op->addr1] =
+                        loc_mem[op->addr2] ^ loc_mem[op->addr3];
                 else if (op->type == OP_NOT)
                     loc_mem[op->addr1] = ~loc_mem[op->addr2];
             }
@@ -114,11 +118,15 @@ fastLEC::ret_vals fastLEC::Simulator::run_pbits_pes(unsigned n_t)
             res = 20;
     }
 
-    printf("c [piES] result = %d [bv:para:batch=%d:%d:%d] [bv_w = %3d] [nGates = %5lu] [nPI = %3lu] [num_bv = %u] [time = %.2f]\n",
+    printf("c [piES] result = %d [bv:para:batch=%d:%d:%d] [bv_w = %3d] [nGates "
+           "= %5lu] [nPI = %3lu] [num_bv = %u] [time = %.2f]\n",
            res,
-           this->bv_bits, this->para_bits, this->batch_bits,
+           this->bv_bits,
+           this->para_bits,
+           this->batch_bits,
            Param::get().custom_params.es_bv_bits,
-           xag.used_gates.size(), xag.PI.size(),
+           xag.used_gates.size(),
+           xag.PI.size(),
            is->glob_es.mem_sz,
            ResMgr::get().get_runtime() - start_time);
 
@@ -128,26 +136,47 @@ fastLEC::ret_vals fastLEC::Simulator::run_pbits_pes(unsigned n_t)
 fastLEC::ret_vals fastLEC::Simulator::run_round_pes(unsigned n_t)
 {
     double start_time = ResMgr::get().get_runtime();
-    assert(is == nullptr);
-    is = std::make_unique<fastLEC::ISimulator>();
-    is->init_glob_ES(xag);
-    cal_es_bits(1);
+    if (is == nullptr)
+    {
+        is = std::make_unique<fastLEC::ISimulator>();
+        is->init_glob_ES(xag);
+    }
 
     std::vector<std::thread> threads;
     std::atomic<bool> found_sat(false);
+    std::atomic<unsigned long long> found_sat_round(0);
     std::atomic<bool> cutted(false);
 
-    auto worker = [&](unsigned long long start_round, unsigned long long end_round)
+    double time_resources = Param::get().timeout - ResMgr::get().get_runtime();
+
+    auto worker =
+        [&](unsigned long long start_round, unsigned long long end_round)
     {
-        std::vector<BitVector> loc_mem(is->glob_es.mem_sz, BitVector(1 << this->bv_bits));
+        auto st = std::chrono::high_resolution_clock::now();
+        std::vector<BitVector> loc_mem(is->glob_es.mem_sz,
+                                       BitVector(1 << this->bv_bits));
 
         for (unsigned long long round = start_round; round < end_round; round++)
         {
-            if (Param::get().verbose > 1 && (round - start_round) % 1000 == 0 && start_round == 0){
-                printf("c [iES] %6.2f%% : round %lld / %llu \n", 
-                    (double)(round - start_round) / (end_round - start_round) * 100, round - start_round, end_round - start_round);
+            if (Param::get().verbose > 1 && (round - start_round) % 1000 == 0 &&
+                start_round == 0)
+            {
+                printf("c [piES] %6.2f%% : round %lld / %llu \n",
+                       (double)(round - start_round) /
+                           (end_round - start_round) * 100,
+                       round - start_round,
+                       end_round - start_round);
                 fflush(stdout);
             }
+            if ((round - start_round) % 100 == 0 &&
+                std::chrono::duration_cast<std::chrono::duration<double>>(
+                    std::chrono::high_resolution_clock::now() - st)
+                        .count() > time_resources)
+            {
+                cutted.store(true);
+                return;
+            }
+
             loc_mem[0].reset();
             loc_mem[1].set();
 
@@ -170,9 +199,11 @@ fastLEC::ret_vals fastLEC::Simulator::run_round_pes(unsigned n_t)
                 operation *op = &is->glob_es.ops[i];
 
                 if (op->type == OP_AND)
-                    loc_mem[op->addr1] = loc_mem[op->addr2] & loc_mem[op->addr3];
+                    loc_mem[op->addr1] =
+                        loc_mem[op->addr2] & loc_mem[op->addr3];
                 else if (op->type == OP_XOR)
-                    loc_mem[op->addr1] = loc_mem[op->addr2] ^ loc_mem[op->addr3];
+                    loc_mem[op->addr1] =
+                        loc_mem[op->addr2] ^ loc_mem[op->addr3];
                 else if (op->type == OP_NOT)
                     loc_mem[op->addr1] = ~loc_mem[op->addr2];
             }
@@ -180,14 +211,15 @@ fastLEC::ret_vals fastLEC::Simulator::run_round_pes(unsigned n_t)
             if (loc_mem[is->glob_es.PO_lit].has_one())
             {
                 found_sat.store(true);
-                break;
+                found_sat_round.store(round);
+                return;
             }
         }
     };
 
     try
     {
-        fflush(stdout);
+        cal_es_bits(1);
         unsigned long long round_num = 1llu << batch_bits;
         for (uint64_t i = 0; i < n_t; i++)
         {
@@ -217,27 +249,31 @@ fastLEC::ret_vals fastLEC::Simulator::run_round_pes(unsigned n_t)
             res = 20;
     }
 
-    printf("c [piES] result = %d [bv:round:batch=%d:%d] [bv_w = %3d] [nGates = %5lu] [nPI = %3lu] [num_bv = %u] [time = %.2f]\n",
+    printf("c [piES] result = %d [bv:pbits=%d:%d] [bv_w = %3d]"
+           " [nGates = %5lu] [nPI = %3lu] [nBV = %u /t.] [time = %.2f]\n",
            res,
-           this->bv_bits, this->batch_bits,
+           this->bv_bits,
+           this->batch_bits,
            Param::get().custom_params.es_bv_bits,
-           xag.used_gates.size(), xag.PI.size(),
+           xag.used_gates.size(),
+           xag.PI.size(),
            is->glob_es.mem_sz,
            ResMgr::get().get_runtime() - start_time);
+    fflush(stdout);
 
     return ret_vals(res);
 }
-
-
 
 // ---------------------------------------------------
 // ES methods from Prover class
 // ---------------------------------------------------
 
-fastLEC::ret_vals fastLEC::Prover::para_ES(std::shared_ptr<fastLEC::XAG> xag, int n_thread)
+fastLEC::ret_vals fastLEC::Prover::para_ES(std::shared_ptr<fastLEC::XAG> xag,
+                                           int n_thread)
 {
     fastLEC::Simulator simu(*xag);
 
+    // default use_pes_pbit = false
     if (Param::get().custom_params.use_pes_pbit)
     {
         int n_t = simu.cal_pes_threads(n_thread);
