@@ -1,10 +1,9 @@
 #include "fastLEC.hpp"
 #include "parser.hpp"
 
-using namespace fastLEC; 
+using namespace fastLEC;
 
-
-void PairsInfo::clear()
+void Sweeper::clear()
 {
     eql_classs.clear();
     class_index.clear();
@@ -14,36 +13,39 @@ void PairsInfo::clear()
     rejected_pairs.clear();
 }
 
-
 // ---------------------------------------------------
 // logic simulation
 // ---------------------------------------------------
-fastLEC::ret_vals fastLEC::Prover::logic_simulation(std::shared_ptr<fastLEC::AIG> aig)
+fastLEC::ret_vals fastLEC::Sweeper::logic_simulation()
 {
     double start_time = ResMgr::get().get_runtime();
     ret_vals ret = ret_vals::ret_UNK;
 
-    pairs_info.clear();
-    std::vector<int> class_index(2 * (aig->get()->maxvar + 1), -1);
+    this->clear();
+    std::vector<int> class_index(2 * (this->xag->max_var + 1), -1);
 
     unsigned pre_round = 0;
     unsigned round = 0;
-    unsigned logic_sim_round = (unsigned)Param::get().ls_bv_bits;
-    unsigned bv_width = (unsigned)Param::get().custom_params.ls_bv_width;
+    unsigned logic_sim_round = (unsigned)Param::get().custom_params.ls_round;
+    unsigned bv_width = (unsigned)Param::get().custom_params.ls_bv_bits;
     for (; round < logic_sim_round; round++)
     {
-        std::vector<BitVector> states(2 * (aig->maxvar + 1));
+        // ---------------------------------------------------------------------
+        // step 1: perform logic simulation
+        // ---------------------------------------------------------------------
+        std::vector<BitVector> states(2 * (this->xag->max_var + 1));
 
-        for (unsigned i = 0; i < PI.size(); i++)
+        for (unsigned i = 0; i < this->xag->PI.size(); i++)
         {
-            int lit = PI[i];
+            int lit = this->xag->PI[i];
             states[lit].resize(1llu << (bv_width - 1));
             states[lit].random();
         }
 
-        for (auto &gate : XAG)
+        for (auto &gate : this->xag->gates)
         {
-            if (gate.type == types::AND2 || gate.type == types::XOR2)
+            if (gate.type == fastLEC::GateType::AND2 ||
+                gate.type == fastLEC::GateType::XOR2)
             {
                 int rhs0 = gate.inputs[0];
                 int rhs1 = gate.inputs[1];
@@ -51,7 +53,7 @@ fastLEC::ret_vals fastLEC::Prover::logic_simulation(std::shared_ptr<fastLEC::AIG
                     states[rhs0] = ~states[aiger_not(rhs0)];
                 if (aiger_sign(rhs1) && states[rhs1].size() == 0)
                     states[rhs1] = ~states[aiger_not(rhs1)];
-                if (gate.type == types::AND2)
+                if (gate.type == fastLEC::GateType::AND2)
                 {
                     states[gate.output] = states[rhs0] & states[rhs1];
                 }
@@ -62,12 +64,15 @@ fastLEC::ret_vals fastLEC::Prover::logic_simulation(std::shared_ptr<fastLEC::AIG
                 states[aiger_not(gate.output)] = ~states[gate.output];
             }
         }
-        if (states[aig->outputs[0].lit].has_one())
+        if (states[this->xag->PO].has_one())
         {
-            // std::cout<<"here"<<std::endl;
             ret = ret_vals::ret_SAT;
             break;
         }
+
+        // ---------------------------------------------------------------------
+        // step 2: perform classification
+        // ---------------------------------------------------------------------
 
         std::unordered_map<BitVector, std::vector<int>> classification;
         classification.clear();
@@ -94,8 +99,9 @@ fastLEC::ret_vals fastLEC::Prover::logic_simulation(std::shared_ptr<fastLEC::AIG
         }
 
         eql_classes.clear();
-        for (auto &[state, indices] : classification)
+        for (auto &pair : classification)
         {
+            const auto &indices = pair.second;
             if (indices.size() <= 1)
                 continue;
 
@@ -113,65 +119,19 @@ fastLEC::ret_vals fastLEC::Prover::logic_simulation(std::shared_ptr<fastLEC::AIG
         pre_round = eql_classes.size();
     }
 
-
-    if(ret == ret_vals::ret_SAT){
+    if (ret == ret_vals::ret_SAT)
+    {
         printf("c [logSim] round %d: Find bugs\n", round);
         return ret;
     }
 
-    printf("c [logSim] round %d: Find %lu classes\n", round, eql_classes.size());
+    printf(
+        "c [logSim] round %d: Find %lu classes\n", round, eql_classes.size());
 
-    // topological sorting
-    topo_idx.clear();
-    topo_idx.resize(aig->maxvar + 1);
-    var_nexts.clear();
-    var_nexts.resize(aig->maxvar + 1);
-
-    std::vector<int> counter(aig->maxvar + 1, 0);
-
-    for (unsigned i = 0; i < aig->num_ands; i++)
-    {
-        aiger_and &and_gate = aig->ands[i];
-        int out_var = aiger_var(and_gate.lhs);
-        int rhs0_var = aiger_var(and_gate.rhs0);
-        int rhs1_var = aiger_var(and_gate.rhs1);
-
-        if (rhs0_var == rhs1_var)
-        {
-            var_nexts[rhs0_var].push_back(out_var);
-            counter[out_var] = 1;
-        }
-        else
-        {
-            var_nexts[rhs0_var].push_back(out_var);
-            var_nexts[rhs1_var].push_back(out_var);
-            counter[out_var] = 2;
-        }
-    }
-
-    unsigned topo_cnt = 0;
-    std::queue<int> q;
-
-    for (unsigned i = 0; i < aig->num_inputs; i++)
-    {
-        int v = aiger_var(aig->inputs[i].lit);
-        q.push(v);
-        topo_idx[v] = ++topo_cnt;
-    }
-
-    while (!q.empty())
-    {
-        int v = q.front();
-        q.pop();
-        for (int next : var_nexts[v])
-        {
-            if (--counter[next] == 0)
-            {
-                q.push(next);
-                topo_idx[next] = ++topo_cnt;
-            }
-        }
-    }
+    // ---------------------------------------------------------------------
+    // step 3: perform topological sorting
+    // ---------------------------------------------------------------------
+    this->xag->topological_sort();
 
     int tmp_ct = 0;
     auto tmp_eql_classes = eql_classes;
@@ -200,9 +160,10 @@ fastLEC::ret_vals fastLEC::Prover::logic_simulation(std::shared_ptr<fastLEC::AIG
             eql_classes.emplace_back(cls);
         }
     }
-    std::vector<int> &topo = this->topo_idx;
+    std::vector<int> &topo = this->xag->topo_idx;
 
-    std::sort(eql_classes.begin(), eql_classes.end(),
+    std::sort(eql_classes.begin(),
+              eql_classes.end(),
               [topo](const std::vector<int> &a, const std::vector<int> &b)
               {
                   int v11 = aiger_var(a[1]);
@@ -219,15 +180,18 @@ fastLEC::ret_vals fastLEC::Prover::logic_simulation(std::shared_ptr<fastLEC::AIG
     if (strash_prune_enabled)
     {
         int deleted_ct = 0;
-        fast_compute_varcone_sizes();
+        xag->fast_compute_varcone_sizes();
 
-        if (debug_veb)
+        if (Param::get().verbose > 2)
         {
             for (unsigned i = 0; i < eql_classes.size(); i++)
             {
                 printf("c [id: %5i] class var={%5d, %5d} -> cone={%5d, %5d}\n",
-                       i, eql_classes[i][0] / 2, eql_classes[i][1] / 2,
-                       varcone_sizes[eql_classes[i][0] / 2], varcone_sizes[eql_classes[i][1] / 2]);
+                       i,
+                       eql_classes[i][0] / 2,
+                       eql_classes[i][1] / 2,
+                       xag->varcone_sizes[eql_classes[i][0] / 2],
+                       xag->varcone_sizes[eql_classes[i][1] / 2]);
             }
         }
 
@@ -236,21 +200,38 @@ fastLEC::ret_vals fastLEC::Prover::logic_simulation(std::shared_ptr<fastLEC::AIG
         {
             int u1 = eql_classes[i][0];
             int u2 = eql_classes[i][1];
-            printf("c [id: %5i] class var={%5d, %5d} -> cone={%5d, %5d} ||del||  ",
-                   ++id, eql_classes[i][0] / 2, eql_classes[i][1] / 2,
-                   varcone_sizes[eql_classes[i][0] / 2], varcone_sizes[eql_classes[i][1] / 2]);
+            printf(
+                "c [id: %5i] class var={%5d, %5d} -> cone={%5d, %5d}  ||del|| ",
+                ++id,
+                eql_classes[i][0] / 2,
+                eql_classes[i][1] / 2,
+                xag->varcone_sizes[eql_classes[i][0] / 2],
+                xag->varcone_sizes[eql_classes[i][1] / 2]);
 
+            int prt_cnt = 0;
             for (unsigned j = i + 1; j < eql_classes.size(); j++)
             {
                 int v1 = eql_classes[j][0];
                 int v2 = eql_classes[j][1];
-                if ((strash_prune(u1, v1) && strash_prune(u2, v2)) || (strash_prune(u1, v2) && strash_prune(u2, v1)))
+                if ((xag->strash_prune(u1, v1) && xag->strash_prune(u2, v2)) ||
+                    (xag->strash_prune(u1, v2) && xag->strash_prune(u2, v1)))
                 {
                     this->skip_pairs[i].push_back({v1, v2});
-                    printf("{%5d, %5d} ", v1 / 2, v2 / 2);
-                    if (debug_veb)
+                    if (++prt_cnt == 11)
                     {
-                        printf("c [netlist] strash class{%d, %d} and class{%d, %d}\n", u1, u2, v1, v2);
+                        printf("\nc%70c", ' ');
+                        prt_cnt = 1;
+                    }
+                    printf("{%5d, %5d} ", v1 / 2, v2 / 2);
+
+                    if (Param::get().verbose > 2)
+                    {
+                        printf("c [netlist] strash class{%d, %d} and class{%d, "
+                               "%d}\n",
+                               u1,
+                               u2,
+                               v1,
+                               v2);
                     }
                     eql_classes.erase(eql_classes.begin() + j);
                     j--;
@@ -259,15 +240,15 @@ fastLEC::ret_vals fastLEC::Prover::logic_simulation(std::shared_ptr<fastLEC::AIG
             }
             printf("\n");
         }
-        printf("c [strash] deleted %d classes by strash, remain %lu potentail-eql classes\n", deleted_ct, eql_classes.size());
+        printf("c [strash] deleted %d classes by strash, remain %lu "
+               "potentail-eql classes\n",
+               deleted_ct,
+               eql_classes.size());
     }
 
-    // initialize the union-find set
-    this->pairs_info.var_replace.resize(aig->maxvar + 1);
-    for (unsigned i = 0; i <= aig->get()->maxvar; i++)
-        pairs_info.var_replace[i] = i;
-
-    printf("c [netlist] logic simulation done. ret = %d [time = %.2f]\n", ret, ResMgr::get().get_runtime() - start_time);
+    printf("c [netlist] logic simulation done. ret = %d [time = %.2f]\n",
+           ret,
+           ResMgr::get().get_runtime() - start_time);
     fflush(stdout);
 
     return ret;

@@ -28,6 +28,7 @@ namespace fastLEC
     USER_PARAM(max_iterations, int, 1000, "Maximum number of iterations")                   \
     USER_PARAM(epsilon, double, 1e-6, "Convergence threshold")                              \
     USER_PARAM(use_gpu, bool, false, "Enable GPU acceleration")                             \
+    USER_PARAM(ls_round, int, 8, "logic synthesis round")                                   \
     USER_PARAM(ls_bv_bits, int, 17, "bitvector width in log scale for logic synthesis")     \
     USER_PARAM(es_bv_bits, int, 14, "bitvector width in log scale for para/seq simulation") \
     USER_PARAM(use_ies, bool, true, "Enable iES")                                           \

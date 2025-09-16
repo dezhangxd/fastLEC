@@ -148,7 +148,7 @@ void XAG::construct_from_aig(const fastLEC::AIG &aig)
         this->used_gates.emplace_back(aig_v);
     }
 
-    if(fastLEC::Param::get().verbose > 2)
+    if (fastLEC::Param::get().verbose > 2)
         std::cout << *this << std::endl;
 }
 
@@ -208,24 +208,28 @@ std::unique_ptr<fastLEC::CNF> XAG::construct_cnf_from_this_xag()
             int i0 = to_cnf_lit(g.inputs[0]);
             int i1 = to_cnf_lit(g.inputs[1]);
 
-            if(used_lits[lhs])
+            if (used_lits[lhs])
             {
-                if(g.type == GateType::XOR2)
+                if (g.type == GateType::XOR2)
                 {
                     cnf->add_clause({-o, i0, i1});
                     cnf->add_clause({-o, -i0, -i1});
-                }else{
+                }
+                else
+                {
                     cnf->add_clause({-o, i0});
                     cnf->add_clause({-o, i1});
-                }  
+                }
             }
-            if(used_lits[not_lhs])
+            if (used_lits[not_lhs])
             {
-                if(g.type == GateType::XOR2)
+                if (g.type == GateType::XOR2)
                 {
                     cnf->add_clause({o, i0, -i1});
                     cnf->add_clause({o, -i0, i1});
-                }else{
+                }
+                else
+                {
                     cnf->add_clause({o, -i0, -i1});
                 }
             }
@@ -234,19 +238,221 @@ std::unique_ptr<fastLEC::CNF> XAG::construct_cnf_from_this_xag()
         cnf->add_clause({to_cnf_lit(this->PO)});
     }
 
-    if(fastLEC::Param::get().verbose > 2)
+    if (fastLEC::Param::get().verbose > 2)
         std::cout << *cnf << std::endl;
 
     return cnf;
 }
-
 
 int fastLEC::XAG::to_cnf_var(int xag_var)
 {
     return lmap_xag_to_cnf[aiger_pos_lit(xag_var)];
 }
 
-int fastLEC::XAG::to_cnf_lit(int xag_lit)
+int fastLEC::XAG::to_cnf_lit(int xag_lit) { return lmap_xag_to_cnf[xag_lit]; }
+
+void fastLEC::XAG::topological_sort()
 {
-    return lmap_xag_to_cnf[xag_lit];
+    this->topo_idx.clear();
+    this->topo_idx.resize(this->max_var + 1);
+    this->v_usr.clear();
+    this->v_usr.resize(this->max_var + 1);
+
+    std::vector<int> counter(this->max_var + 1, 0);
+
+    for (auto gid : this->used_gates)
+    {
+        const Gate &g = this->gates[gid];
+        assert(gid == aiger_var(g.output));
+        int out_var = gid;
+        int rhs0_var = aiger_var(g.inputs[0]);
+        int rhs1_var = aiger_var(g.inputs[1]);
+
+        if (rhs0_var == rhs1_var)
+        {
+            this->v_usr[rhs0_var].push_back(out_var);
+            counter[out_var] = 1;
+        }
+        else
+        {
+            this->v_usr[rhs0_var].push_back(out_var);
+            this->v_usr[rhs1_var].push_back(out_var);
+            counter[out_var] = 2;
+        }
+    }
+
+    unsigned topo_cnt = 0;
+    std::queue<int> q;
+
+    for (unsigned i = 0; i < this->PI.size(); i++)
+    {
+        int v = aiger_var(this->PI[i]);
+        q.push(v);
+        topo_idx[v] = ++topo_cnt;
+    }
+
+    while (!q.empty())
+    {
+        int v = q.front();
+        q.pop();
+        for (int next : this->v_usr[v])
+        {
+            if (--counter[next] == 0)
+            {
+                q.push(next);
+                topo_idx[next] = ++topo_cnt;
+            }
+        }
+    }
+
+    if (fastLEC::Param::get().verbose > 3)
+    {
+        printf("used gates %zu \n", this->used_gates.size());
+        printf("PI %zu \n", this->PI.size());
+        printf("PO var %d \n", aiger_var(this->PO));
+        for (unsigned i = 1; i <= (unsigned)this->max_var; i++)
+        {
+            printf("%5d:%5d \t", i, topo_idx[i]);
+            if (i % 10 == 0)
+                printf("\n");
+        }
+        printf("\n");
+        fflush(stdout);
+    }
+}
+
+void XAG::fast_compute_varcone_sizes()
+{
+    this->varcone_sizes.clear();
+    this->varcone_sizes.resize(this->max_var + 1, 0);
+    std::vector<int> queue(this->max_var + 1);
+    std::vector<bool> visited(this->max_var + 1, false);
+    for (unsigned i = 1; i <= (unsigned)this->max_var; i++)
+    {
+        unsigned left = 1, right = 0;
+        for (unsigned j = 1; j <= (unsigned)this->max_var; j++)
+            visited[j] = false;
+
+        queue[++right] = i;
+        visited[i] = true;
+        while (left <= right)
+        {
+            int aig_v = queue[left++];
+            Gate &g = this->gates[aig_v];
+            if (g.type == GateType::AND2 || g.type == GateType::XOR2)
+            {
+                int i0 = aiger_var(g.inputs[0]);
+                int i1 = aiger_var(g.inputs[1]);
+                if (!visited[i0])
+                {
+                    queue[++right] = i0;
+                    visited[i0] = true;
+                }
+                if (!visited[i1])
+                {
+                    queue[++right] = i1;
+                    visited[i1] = true;
+                }
+            }
+        }
+        varcone_sizes[i] = right;
+    }
+
+    if (fastLEC::Param::get().verbose > 3)
+    {
+        for (int i = 1; i <= this->max_var; i++)
+        {
+            printf("%d:%d  \t", i, varcone_sizes[i]);
+            if (i % 20 == 0)
+                printf("\n");
+        }
+        printf("\n");
+        fflush(stdout);
+    }
+}
+
+bool XAG::strash_prune(unsigned n1, unsigned n2)
+{
+    unsigned n1v = aiger_var(n1);
+    unsigned n2v = aiger_var(n2);
+
+    if (varcone_sizes[n1v] != varcone_sizes[n2v])
+        return false;
+
+    std::vector<bool> visited1(this->max_var + 1, false);
+    std::vector<bool> visited2(this->max_var + 1, false);
+    std::queue<int> queue1, queue2;
+
+    queue1.push(n1v);
+    queue2.push(n2v);
+    visited1[n1v] = true;
+    visited2[n2v] = true;
+
+    while (!queue1.empty() && !queue2.empty())
+    {
+        int v1 = queue1.front();
+        int v2 = queue2.front();
+        queue1.pop();
+        queue2.pop();
+
+        Gate &g1 = this->gates[v1];
+        Gate &g2 = this->gates[v2];
+
+        if (g1.type != g2.type)
+            return false;
+
+        if (g1.type != GateType::AND2 && g1.type != GateType::XOR2)
+            continue;
+
+        unsigned g1_l1 = g1.inputs[0];
+        unsigned g1_l2 = g1.inputs[1];
+        unsigned g2_l1 = g2.inputs[0];
+        unsigned g2_l2 = g2.inputs[1];
+
+        unsigned g1_v1 = aiger_var(g1_l1);
+        unsigned g1_v2 = aiger_var(g1_l2);
+        unsigned g2_v1 = aiger_var(g2_l1);
+        unsigned g2_v2 = aiger_var(g2_l2);
+
+        if (varcone_sizes[g1_v1] != varcone_sizes[g2_v1])
+            std::swap(g2_v1, g2_v2), std::swap(g2_l1, g2_l1);
+        if (varcone_sizes[g1_v1] != varcone_sizes[g2_v1] ||
+            varcone_sizes[g1_v2] != varcone_sizes[g2_v2])
+            return false;
+        if (varcone_sizes[g1_v2] == varcone_sizes[g2_v2])
+        {
+            if (aiger_sign(g1_l1) != aiger_sign(g2_l1))
+                std::swap(g2_v1, g2_v2), std::swap(g2_l1, g2_l1);
+
+            if (visited1[g1_v1] != visited2[g2_v1])
+                std::swap(g2_v1, g2_v2), std::swap(g2_l1, g2_l1);
+        }
+        if (aiger_sign(g1_l1) != aiger_sign(g2_l1) ||
+            aiger_sign(g1_l2) != aiger_sign(g2_l2))
+            return false;
+
+        if (visited1[g1_v1] != visited2[g2_v1] ||
+            visited1[g1_v2] != visited2[g2_v2])
+            return false;
+
+        if (!visited1[g1_v1])
+        {
+            queue1.push(g1_v1);
+            queue2.push(g2_v1);
+            visited1[g1_v1] = true;
+            visited2[g2_v1] = true;
+        }
+
+        if (!visited1[g1_v2])
+        {
+            queue1.push(g1_v2);
+            queue2.push(g2_v2);
+            visited1[g1_v2] = true;
+            visited2[g2_v2] = true;
+        }
+    }
+    if (!queue1.empty() || !queue2.empty())
+        return false;
+
+    return true;
 }

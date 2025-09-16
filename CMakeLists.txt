@@ -534,7 +534,7 @@ set(SOURCES
     src/cudd.cpp
     src/simu_seq.cpp
     src/simu_para.cpp
-    src/simu_logic.cpp
+    src/sweeper.cpp
 )
 
 # CUDA source files

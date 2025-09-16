@@ -69,8 +69,11 @@ public:
     std::shared_ptr<fastLEC::CNF> get_cnf_shared() { return cnf; }
 };
 
-struct PairsInfo
+// SAT sweeping engines
+class Sweeper
 {
+    std::shared_ptr<fastLEC::XAG> xag;
+
     // eql classes
     std::vector<std::vector<int>> eql_classs;
     // the index of a aiger literal in eql_class
@@ -87,15 +90,22 @@ struct PairsInfo
     // var re-mapping
     std::vector<int> var_replace;
 
-    // clear
+public:
+    Sweeper() = default;
+    Sweeper(std::shared_ptr<fastLEC::XAG> xag) : xag(xag) {}
+    ~Sweeper() = default;
+
     void clear();
+
+    fastLEC::ret_vals logic_simulation();
+
+    fastLEC::ret_vals run_SAT_sweeping();
 };
 
 class Prover
 {
 private:
     std::shared_ptr<fastLEC::AIG> aig;
-    PairsInfo pairs_info;
 
 public:
     Prover() = default;
@@ -120,9 +130,8 @@ public:
     fastLEC::ret_vals para_ES(std::shared_ptr<fastLEC::XAG> xag, int n_t = 1);
     fastLEC::ret_vals gpu_ES(std::shared_ptr<fastLEC::XAG> xag);
 
-    // generate aig_lists from AIG
-    fastLEC::ret_vals logic_simulation(std::shared_ptr<fastLEC::AIG> aig);
-    
+    // sweeping engine for CEC
+    fastLEC::ret_vals run_sweeping(std::shared_ptr<fastLEC::Sweeper> sweeper);
 
     //---------------------------------------------------
     // CEC check
