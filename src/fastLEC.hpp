@@ -2,6 +2,8 @@
 
 #include <string>
 #include <memory>
+#include <map>
+
 #include "AIG.hpp"   // AIGER
 #include "XAG.hpp"   // XAG
 #include "CNF.hpp"   // CNF
@@ -67,10 +69,33 @@ public:
     std::shared_ptr<fastLEC::CNF> get_cnf_shared() { return cnf; }
 };
 
+struct PairsInfo
+{
+    // eql classes
+    std::vector<std::vector<int>> eql_classs;
+    // the index of a aiger literal in eql_class
+    std::vector<int> class_index;
+    // the potential-eql node pairs (aiger literal pair)
+    std::vector<std::vector<int>> eql_classes;
+    // the skipped pairs
+    std::map<int, std::vector<std::pair<int, int>>> skip_pairs;
+    // the proved pairs
+    std::vector<std::pair<int, int>> proved_pairs;
+    // the rejected pairs
+    std::vector<std::pair<int, int>> rejected_pairs;
+
+    // var re-mapping
+    std::vector<int> var_replace;
+
+    // clear
+    void clear();
+};
+
 class Prover
 {
 private:
     std::shared_ptr<fastLEC::AIG> aig;
+    PairsInfo pairs_info;
 
 public:
     Prover() = default;
@@ -81,15 +106,23 @@ public:
     bool read_aiger(const std::string &filename = "");
 
     //---------------------------------------------------
-    fastLEC::ret_vals fast_aig_check(
-        std::shared_ptr<fastLEC::AIG> aig); // check const output of AIG
-    fastLEC::ret_vals seq_SAT_kissat(
-        std::shared_ptr<fastLEC::CNF> cnf); // using kissat to solve CNF
-    fastLEC::ret_vals
-    seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag); // using CUDD to XAG
+    // check const output of AIG
+    fastLEC::ret_vals fast_aig_check(std::shared_ptr<fastLEC::AIG> aig);
+
+    // using SAT solvers to solve CNF
+    fastLEC::ret_vals seq_SAT_kissat(std::shared_ptr<fastLEC::CNF> cnf);
+
+    // using BDDs for XAG
+    fastLEC::ret_vals seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag);
+
+    // using ES to XAG
     fastLEC::ret_vals seq_ES(std::shared_ptr<fastLEC::XAG> xag);
     fastLEC::ret_vals para_ES(std::shared_ptr<fastLEC::XAG> xag, int n_t = 1);
     fastLEC::ret_vals gpu_ES(std::shared_ptr<fastLEC::XAG> xag);
+
+    // generate aig_lists from AIG
+    fastLEC::ret_vals logic_simulation(std::shared_ptr<fastLEC::AIG> aig);
+    
 
     //---------------------------------------------------
     // CEC check

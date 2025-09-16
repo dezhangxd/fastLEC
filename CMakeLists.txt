@@ -534,6 +534,7 @@ set(SOURCES
     src/cudd.cpp
     src/simu_seq.cpp
     src/simu_para.cpp
+    src/simu_logic.cpp
 )
 
 # CUDA source files
