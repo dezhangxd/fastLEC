@@ -86,6 +86,14 @@ public:
     bool strash_prune(unsigned a, unsigned b); // strash hashing matching
 
     //---------------------------------------------------
+    // sub-graph extraction
+    //---------------------------------------------------
+    std::shared_ptr<fastLEC::XAG>
+    extract_sub_graph(const std::vector<int> vec_po);
+
+    //---------------------------------------------------
+    // format conversion
+    //---------------------------------------------------
     void construct_from_aig(const fastLEC::AIG &aig);
 
     std::unique_ptr<fastLEC::CNF> construct_cnf_from_this_xag();

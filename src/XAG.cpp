@@ -456,3 +456,9 @@ bool XAG::strash_prune(unsigned n1, unsigned n2)
 
     return true;
 }
+
+std::shared_ptr<fastLEC::XAG>
+XAG::extract_sub_graph(const std::vector<int> vec_po)
+{
+    return std::make_shared<fastLEC::XAG>(*this);
+}

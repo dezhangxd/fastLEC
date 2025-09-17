@@ -1,11 +1,13 @@
 #include "fastLEC.hpp"
 #include "parser.hpp"
+#include <iomanip>
+#include <sstream>
 
 using namespace fastLEC;
 
 void Sweeper::clear()
 {
-    eql_classs.clear();
+    next_class_idx = 0;
     class_index.clear();
     eql_classes.clear();
     skip_pairs.clear();
@@ -252,4 +254,41 @@ fastLEC::ret_vals fastLEC::Sweeper::logic_simulation()
     fflush(stdout);
 
     return ret;
+}
+
+std::shared_ptr<fastLEC::XAG> Sweeper::next_sub_graph()
+{
+    std::shared_ptr<fastLEC::XAG> sub_xag = nullptr;
+    sub_graph_string = "";
+    if (this->next_class_idx == this->eql_classes.size())
+    {
+        sub_xag = this->xag->extract_sub_graph({this->xag->PO});
+        std::ostringstream oss;
+        oss << "[ Final ] PO-literal {" << std::to_string(this->xag->PO)
+            << "}, var={ " << aiger_var(this->xag->PO) << "}, cone_size "
+            << xag->varcone_sizes[aiger_var(this->xag->PO)]
+            << ", PI= " << this->xag->PI.size();
+        sub_graph_string += oss.str();
+    }
+    else if (this->next_class_idx < this->eql_classes.size())
+    {
+        sub_xag = this->xag->extract_sub_graph(
+            this->eql_classes[this->next_class_idx]);
+        std::ostringstream oss;
+        oss << "[" << std::setw(4) << (next_class_idx + 1) << "/"
+            << std::setw(4) << eql_classes.size() << "] literals ={"
+            << std::setw(5) << eql_classes[this->next_class_idx][0] << ", "
+            << std::setw(5) << eql_classes[this->next_class_idx][1]
+            << "}, vars={" << std::setw(5)
+            << (eql_classes[this->next_class_idx][0] / 2) << ", "
+            << std::setw(5) << (eql_classes[this->next_class_idx][1] / 2)
+            << "}, cone_size={" << std::setw(5)
+            << xag->varcone_sizes[eql_classes[this->next_class_idx][0] / 2]
+            << ", " << std::setw(5)
+            << xag->varcone_sizes[eql_classes[this->next_class_idx][1] / 2]
+            << "}, PI= " << sub_xag->PI.size();
+        sub_graph_string += oss.str();
+    }
+    this->next_class_idx++;
+    return sub_xag;
 }

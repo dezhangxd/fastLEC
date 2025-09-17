@@ -75,7 +75,7 @@ class Sweeper
     std::shared_ptr<fastLEC::XAG> xag;
 
     // eql classes
-    std::vector<std::vector<int>> eql_classs;
+    unsigned next_class_idx = 0;
     // the index of a aiger literal in eql_class
     std::vector<int> class_index;
     // the potential-eql node pairs (aiger literal pair)
@@ -99,7 +99,8 @@ public:
 
     fastLEC::ret_vals logic_simulation();
 
-    fastLEC::ret_vals run_SAT_sweeping();
+    std::string sub_graph_string;
+    std::shared_ptr<fastLEC::XAG> next_sub_graph();
 };
 
 class Prover

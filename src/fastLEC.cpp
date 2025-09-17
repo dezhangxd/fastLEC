@@ -2,6 +2,9 @@
 #include "parser.hpp"
 #include "basic.hpp"
 #include "simu.hpp"
+#include <cstddef>
+#include <cstdio>
+#include <memory>
 
 using namespace fastLEC;
 
@@ -369,7 +372,16 @@ Prover::run_sweeping(std::shared_ptr<fastLEC::Sweeper> sweeper)
     if (ret == ret_vals::ret_SAT)
         return ret;
 
-    // TODO: add SAT solvers
+    std::shared_ptr<fastLEC::XAG> sub_graph = nullptr;
+
+    while ((sub_graph = sweeper->next_sub_graph()))
+    {
+        if (Param::get().verbose > 0)
+        {
+            printf("%s\n", sweeper->sub_graph_string.c_str());
+            fflush(stdout);
+        }
+    }
 
     return ret;
 }
