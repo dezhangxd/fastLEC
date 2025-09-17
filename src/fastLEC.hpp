@@ -2,12 +2,12 @@
 
 #include <string>
 #include <memory>
-#include <map>
 
-#include "AIG.hpp"   // AIGER
-#include "XAG.hpp"   // XAG
-#include "CNF.hpp"   // CNF
-#include "basic.hpp" // basic
+#include "AIG.hpp" // AIGER
+#include "XAG.hpp" // XAG
+#include "CNF.hpp" // CNF
+#include "basic.hpp"
+#include "sweeper.hpp"
 
 namespace fastLEC
 {
@@ -67,40 +67,6 @@ public:
     std::shared_ptr<fastLEC::AIG> get_aig_shared() { return aig; }
     std::shared_ptr<fastLEC::XAG> get_xag_shared() { return xag; }
     std::shared_ptr<fastLEC::CNF> get_cnf_shared() { return cnf; }
-};
-
-// SAT sweeping engines
-class Sweeper
-{
-    std::shared_ptr<fastLEC::XAG> xag;
-
-    // eql classes
-    unsigned next_class_idx = 0;
-    // the index of a aiger literal in eql_class
-    std::vector<int> class_index;
-    // the potential-eql node pairs (aiger literal pair)
-    std::vector<std::vector<int>> eql_classes;
-    // the skipped pairs
-    std::map<int, std::vector<std::pair<int, int>>> skip_pairs;
-    // the proved pairs
-    std::vector<std::pair<int, int>> proved_pairs;
-    // the rejected pairs
-    std::vector<std::pair<int, int>> rejected_pairs;
-
-    // var re-mapping
-    std::vector<int> var_replace;
-
-public:
-    Sweeper() = default;
-    Sweeper(std::shared_ptr<fastLEC::XAG> xag) : xag(xag) {}
-    ~Sweeper() = default;
-
-    void clear();
-
-    fastLEC::ret_vals logic_simulation();
-
-    std::string sub_graph_string;
-    std::shared_ptr<fastLEC::XAG> next_sub_graph();
 };
 
 class Prover
