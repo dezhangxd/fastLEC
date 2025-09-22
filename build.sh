@@ -12,6 +12,10 @@ elif [ "$1" = "cuda" ]; then
     echo "=== cuda ==="
     cmake -DUSE_CUDA=ON ..
     make -j
+elif [ "$1" = "debug" ]; then
+    echo "=== debug ==="
+    cmake -DUSE_CUDA=OFF -DCMAKE_BUILD_TYPE=Debug ..
+    make -j
 else
     echo "=== no cuda ==="
     cmake -DUSE_CUDA=OFF ..

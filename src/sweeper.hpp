@@ -26,9 +26,6 @@ class Sweeper
     // the rejected pairs
     std::vector<std::pair<int, int>> rejected_pairs;
 
-    // var re-mapping
-    std::vector<int> var_replace;
-
 public:
     Sweeper() = default;
     Sweeper(std::shared_ptr<fastLEC::XAG> xag) : xag(xag) {}

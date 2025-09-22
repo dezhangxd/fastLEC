@@ -2,7 +2,7 @@ clear;
 clear;
 
 # ./clean.sh
-./build.sh
+./build.sh debug
 
 BUILD_DIR="build"
 

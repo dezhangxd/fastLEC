@@ -12,9 +12,9 @@ namespace fastLEC
 enum GateType
 {
     NUL,  // unknown gate
+    PI,   // primary input
     AND2, // AND gate with 2 inputs
     XOR2, // XOR gate with 2 inputs
-    PI,   // primary input
 };
 
 class Gate
@@ -90,6 +90,16 @@ public:
     //---------------------------------------------------
     std::shared_ptr<fastLEC::XAG>
     extract_sub_graph(const std::vector<int> vec_po);
+
+    //---------------------------------------------------
+    // XAG useless variable elimination and remapping
+    //---------------------------------------------------
+    std::vector<int> var_replace;
+    void init_var_replace();
+    void compact(); // TODO
+
+    std::vector<int> father_var_mapper;
+    std::vector<int> son_var_mapper;
 
     //---------------------------------------------------
     // format conversion

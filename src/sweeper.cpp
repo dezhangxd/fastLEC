@@ -188,8 +188,11 @@ fastLEC::ret_vals fastLEC::Sweeper::logic_simulation()
         {
             for (unsigned i = 0; i < eql_classes.size(); i++)
             {
-                printf("c [id: %5i] class var={%5d, %5d} -> cone={%5d, %5d}\n",
+                printf("c [id: %5i] l{%5d, %5d}, v{%5d, %5d}"
+                       " -> cone={%5d, %5d}\n",
                        i,
+                       eql_classes[i][0],
+                       eql_classes[i][1],
                        eql_classes[i][0] / 2,
                        eql_classes[i][1] / 2,
                        xag->varcone_sizes[eql_classes[i][0] / 2],
@@ -202,13 +205,15 @@ fastLEC::ret_vals fastLEC::Sweeper::logic_simulation()
         {
             int u1 = eql_classes[i][0];
             int u2 = eql_classes[i][1];
-            printf(
-                "c [id: %5i] class var={%5d, %5d} -> cone={%5d, %5d}  ||del|| ",
-                ++id,
-                eql_classes[i][0] / 2,
-                eql_classes[i][1] / 2,
-                xag->varcone_sizes[eql_classes[i][0] / 2],
-                xag->varcone_sizes[eql_classes[i][1] / 2]);
+            printf("c [id: %5i] l{%5d, %5d}, v{%5d, %5d} "
+                   "-> cone={%5d, %5d} |del| ",
+                   ++id,
+                   eql_classes[i][0],
+                   eql_classes[i][1],
+                   eql_classes[i][0] / 2,
+                   eql_classes[i][1] / 2,
+                   xag->varcone_sizes[eql_classes[i][0] / 2],
+                   xag->varcone_sizes[eql_classes[i][1] / 2]);
 
             int prt_cnt = 0;
             for (unsigned j = i + 1; j < eql_classes.size(); j++)
@@ -221,10 +226,10 @@ fastLEC::ret_vals fastLEC::Sweeper::logic_simulation()
                     this->skip_pairs[i].push_back({v1, v2});
                     if (++prt_cnt == 11)
                     {
-                        printf("\nc%70c", ' ');
+                        printf("\nc%75c", ' ');
                         prt_cnt = 1;
                     }
-                    printf("{%5d, %5d} ", v1 / 2, v2 / 2);
+                    printf("v{%5d, %5d} ", v1 / 2, v2 / 2);
 
                     if (Param::get().verbose > 2)
                     {
@@ -248,6 +253,8 @@ fastLEC::ret_vals fastLEC::Sweeper::logic_simulation()
                eql_classes.size());
     }
 
+    this->xag->init_var_replace();
+
     printf("c [netlist] logic simulation done. ret = %d [time = %.2f]\n",
            ret,
            ResMgr::get().get_runtime() - start_time);
@@ -267,7 +274,7 @@ std::shared_ptr<fastLEC::XAG> Sweeper::next_sub_graph()
         oss << "[ Final ] PO-literal {" << std::to_string(this->xag->PO)
             << "}, var={ " << aiger_var(this->xag->PO) << "}, cone_size "
             << xag->varcone_sizes[aiger_var(this->xag->PO)]
-            << ", PI= " << this->xag->PI.size();
+            << ", PI= " << sub_xag->PI.size();
         sub_graph_string += oss.str();
     }
     else if (this->next_class_idx < this->eql_classes.size())

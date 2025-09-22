@@ -1,10 +1,13 @@
 #include "XAG.hpp"
+#include "AIG.hpp"
 #include "parser.hpp"
 
 #include <cassert>
+#include <cstdio>
 #include <iomanip>
 #include <iostream>
 #include <stdexcept>
+#include <algorithm>
 
 using namespace fastLEC;
 
@@ -457,8 +460,220 @@ bool XAG::strash_prune(unsigned n1, unsigned n2)
     return true;
 }
 
-std::shared_ptr<fastLEC::XAG>
-XAG::extract_sub_graph(const std::vector<int> vec_po)
+void XAG::init_var_replace()
 {
-    return std::make_shared<fastLEC::XAG>(*this);
+    this->var_replace.clear();
+    this->var_replace.resize(this->max_var + 1, -1);
+    // for (unsigned i = 0; i < this->var_replace.size(); i++)
+    for (unsigned l : this->PI)
+    {
+        int v = aiger_var(l);
+        this->var_replace[v] = v;
+    }
+    for (unsigned i : this->used_gates)
+        this->var_replace[i] = i;
+}
+
+std::shared_ptr<fastLEC::XAG> XAG::extract_sub_graph(std::vector<int> vec_po)
+{
+    if (vec_po.size() == 2 && vec_po[0] > vec_po[1])
+        std::swap(vec_po[0], vec_po[1]);
+
+    std::function<int(int)> find_father = [&](int v) -> int
+    {
+        if (this->var_replace[v] != v)
+            this->var_replace[v] = find_father(this->var_replace[v]);
+
+        return this->var_replace[v];
+    };
+
+    // ---------------------------------------------------
+    // step1: extract the cones
+    // ---------------------------------------------------
+    std::vector<bool> refs(this->max_var + 1, false);
+    int v0 = 0, v1 = 0;
+    int pos = -1;
+    for (unsigned i = 0; i < vec_po.size(); i++)
+    {
+        int &v = (i == 0) ? v0 : v1;
+        v = find_father(aiger_var(vec_po[i]));
+        pos = std::max(pos, v);
+        refs[v] = true;
+    }
+
+    std::vector<fastLEC::Gate> tmp_gates;
+    tmp_gates.clear();
+    for (; pos >= 0; pos--)
+    {
+        if (!refs[pos])
+            continue;
+
+        Gate &g = this->gates[pos];
+
+        if (g.type == fastLEC::GateType::AND2 ||
+            g.type == fastLEC::GateType::XOR2)
+        {
+            int v_i0 = find_father(aiger_var(g.inputs[0]));
+            int v_i1 = find_father(aiger_var(g.inputs[1]));
+            int l_i0 = aiger_sign(g.inputs[0]) ? aiger_neg_lit(v_i0)
+                                               : aiger_pos_lit(v_i0);
+            int l_i1 = aiger_sign(g.inputs[1]) ? aiger_neg_lit(v_i1)
+                                               : aiger_pos_lit(v_i1);
+            tmp_gates.emplace_back(Gate(g.output, g.type, l_i0, l_i1));
+
+            refs[v_i1] = true;
+            refs[v_i0] = true;
+        }
+    }
+    std::reverse(tmp_gates.begin(), tmp_gates.end());
+
+    // ---------------------------------------------------
+    // step 2: reduce const 0 1 variables
+    // ---------------------------------------------------
+    std::vector<int> mp(2 * (this->max_var + 1), 0);
+    for (unsigned i = 0; i < mp.size(); i++)
+        mp[i] = i;
+    std::vector<bool> use_flag(this->max_var + 1, false);
+    unsigned i = 0, j = 0;
+    for (; i < tmp_gates.size(); i++)
+    {
+        Gate &g = tmp_gates[i];
+
+        if (mp[g.inputs[0]] == 0 || mp[g.inputs[1]] == 0)
+            continue;
+
+        unsigned i0 = mp[g.inputs[0]];
+        unsigned i1 = mp[g.inputs[1]];
+
+        bool keep = false;
+        if (g.type == GateType::AND2)
+        {
+            if (i0 == (i1 ^ 1))
+                mp[g.output] = 0, mp[g.output ^ 1] = 1;
+            else if (i0 == i1)
+                mp[g.output] = mp[i0], mp[g.output ^ 1] = mp[i0 ^ 1];
+            else if (i0 == 0 || i0 == 0)
+                mp[g.output] = 0, mp[g.output ^ 1] = 1;
+            else if (i0 == 1)
+                mp[g.output] = mp[i1], mp[g.output ^ 1] = mp[i1 ^ 1];
+            else if (i1 == 1)
+                mp[g.output] = mp[i0], mp[g.output ^ 1] = mp[i0 ^ 1];
+            else
+                keep = true;
+        }
+        else if (g.type == GateType::XOR2)
+        {
+            if (i0 == (i1 ^ 1))
+                mp[g.output] = 1, mp[g.output ^ 1] = 0;
+            else if (i0 == i1)
+                mp[g.output] = 0, mp[g.output ^ 1] = 1;
+            else if (i0 == 0)
+                mp[g.output] = mp[i1], mp[g.output ^ 1] = mp[i1 ^ 1];
+            else if (i1 == 0)
+                mp[g.output] = mp[i0], mp[g.output ^ 1] = mp[i0 ^ 1];
+            else if (i0 == 1)
+                mp[g.output] = mp[i1 ^ 1], mp[g.output ^ 1] = mp[i1];
+            else if (i1 == 1)
+                mp[g.output] = mp[i0 ^ 1], mp[g.output ^ 1] = mp[i0];
+            else
+                keep = true;
+        }
+
+        if (keep)
+        {
+            tmp_gates[j++] = g;
+            use_flag[aiger_var(i0)] = true;
+            use_flag[aiger_var(i1)] = true;
+            use_flag[aiger_var(g.output)] = true;
+        }
+    }
+    gates.resize(j);
+    v0 = mp[aiger_pos_lit(v0)] >> 1;
+    v1 = mp[aiger_pos_lit(v1)] >> 1;
+
+    // ---------------------------------------------------
+    // step 3: compact: removing useless variables
+    // ---------------------------------------------------
+    int mapper_cnt = 1; // variable counter
+    // literal mapper, reordering the literals
+    std::vector<int> mapper(2 * (this->max_var + 1), -1);
+    mapper[0] = 0, mapper[1] = 1;
+    for (int v = 1; v <= this->max_var; v++)
+    {
+        if (use_flag[v])
+        {
+            mapper[aiger_pos_lit(v)] = aiger_pos_lit(mapper_cnt);
+            mapper[aiger_neg_lit(v)] = aiger_neg_lit(mapper_cnt);
+            mapper_cnt++;
+        }
+    }
+
+    // ---------------------------------------------------
+    // step 4: build sub-XAG
+    // ---------------------------------------------------
+    std::shared_ptr<fastLEC::XAG> sub_xag = std::make_shared<fastLEC::XAG>();
+
+    sub_xag->max_var = mapper_cnt;
+    sub_xag->PI.clear();
+    sub_xag->used_gates.clear();
+    for (int l : this->PI)
+    {
+        int v_i = find_father(aiger_var(l));
+        if (use_flag[v_i])
+            sub_xag->PI.push_back(mapper[aiger_pos_lit(v_i)]);
+    }
+    sub_xag->num_PIs_org = sub_xag->PI.size();
+
+    for (auto &g : this->gates)
+    {
+        int o = mapper[g.output];
+        int i0 = mapper[g.inputs[0]];
+        int i1 = mapper[g.inputs[1]];
+        sub_xag->gates.emplace_back(fastLEC::Gate(o, g.type, i0, i1));
+        sub_xag->used_gates.emplace_back(aiger_var(o));
+    }
+
+    if (vec_po.size() == 2)
+    {
+        int l0 = aiger_sign(vec_po[0]) ? aiger_neg_lit(v0) : aiger_pos_lit(v0);
+        int l1 = aiger_sign(vec_po[1]) ? aiger_neg_lit(v1) : aiger_pos_lit(v1);
+        // assert(mp[l0] != mp[l1]); // two cones should be useful
+        l0 = mp[l0], l1 = mp[l1];
+        mapper_cnt += 1;
+        sub_xag->max_var = mapper_cnt;
+        sub_xag->PO = aiger_pos_lit(mapper_cnt);
+        sub_xag->gates.emplace_back(fastLEC::Gate(sub_xag->PO, XOR2, l0, l1));
+        sub_xag->used_gates.emplace_back(mapper_cnt);
+    }
+    else if (vec_po.size() == 1)
+    {
+        if (v0 == 0 || v0 == 1) // constant
+            sub_xag->PO = v0;
+        else // variables
+            sub_xag->PO = aiger_sign(vec_po[0]) ? mapper[aiger_neg_lit(v0)]
+                                                : mapper[aiger_pos_lit(v0)];
+    }
+    else
+    {
+        printf("Error: vec_po.size() == %zu\n", vec_po.size());
+        exit(1);
+    }
+
+    // ---------------------------------------------------
+    // step 5: father son mapper
+    // ---------------------------------------------------
+    sub_xag->father_var_mapper.resize(this->max_var + 1, -1);
+    sub_xag->son_var_mapper.resize(sub_xag->max_var + 1, -1);
+    for (int v = 1; v <= this->max_var; v++)
+    {
+        int f_v = v;
+        int s_l = mapper[aiger_pos_lit(v)];
+        if (s_l == -1)
+            continue;
+        int s_v = aiger_var(s_l);
+        sub_xag->father_var_mapper[f_v] = s_v;
+        sub_xag->son_var_mapper[s_v] = f_v;
+    }
+
+    return sub_xag;
 }
