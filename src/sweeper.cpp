@@ -271,9 +271,9 @@ std::shared_ptr<fastLEC::XAG> Sweeper::next_sub_graph()
     {
         sub_xag = this->xag->extract_sub_graph({this->xag->PO});
         std::ostringstream oss;
-        oss << "[ Final ] PO-literal {" << std::to_string(this->xag->PO)
-            << "}, var={ " << aiger_var(this->xag->PO) << "}, cone_size "
-            << xag->varcone_sizes[aiger_var(this->xag->PO)]
+        oss << "c*[ Final ] PO-lit{" << std::to_string(this->xag->PO)
+            << "}, v{ " << aiger_var(this->xag->PO) << "}, cone={ "
+            << xag->varcone_sizes[aiger_var(this->xag->PO)] << "}"
             << ", PI= " << sub_xag->PI.size();
         sub_graph_string += oss.str();
     }
@@ -282,14 +282,13 @@ std::shared_ptr<fastLEC::XAG> Sweeper::next_sub_graph()
         sub_xag = this->xag->extract_sub_graph(
             this->eql_classes[this->next_class_idx]);
         std::ostringstream oss;
-        oss << "[" << std::setw(4) << (next_class_idx + 1) << "/"
-            << std::setw(4) << eql_classes.size() << "] literals ={"
-            << std::setw(5) << eql_classes[this->next_class_idx][0] << ", "
-            << std::setw(5) << eql_classes[this->next_class_idx][1]
-            << "}, vars={" << std::setw(5)
+        oss << "c*[" << std::setw(4) << (next_class_idx + 1) << "/"
+            << std::setw(4) << eql_classes.size() << "] l{" << std::setw(5)
+            << eql_classes[this->next_class_idx][0] << ", " << std::setw(5)
+            << eql_classes[this->next_class_idx][1] << "}, v={" << std::setw(5)
             << (eql_classes[this->next_class_idx][0] / 2) << ", "
             << std::setw(5) << (eql_classes[this->next_class_idx][1] / 2)
-            << "}, cone_size={" << std::setw(5)
+            << "}, cone={" << std::setw(5)
             << xag->varcone_sizes[eql_classes[this->next_class_idx][0] / 2]
             << ", " << std::setw(5)
             << xag->varcone_sizes[eql_classes[this->next_class_idx][1] / 2]
@@ -298,4 +297,60 @@ std::shared_ptr<fastLEC::XAG> Sweeper::next_sub_graph()
     }
     this->next_class_idx++;
     return sub_xag;
+}
+
+void Sweeper::post_proof(fastLEC::ret_vals ret)
+{
+    int last_id = this->next_class_idx - 1;
+    if (last_id >= this->eql_classes.size())
+        return;
+
+    int l1 = this->eql_classes[last_id][0];
+    int l2 = this->eql_classes[last_id][1];
+    std::pair<int, int> pair = std::make_pair(l1, l2);
+    if (ret == ret_vals::ret_UNS)
+    {
+        this->proved_pairs.emplace_back(pair);
+        for (auto &p : this->skip_pairs[last_id])
+            this->proved_pairs.emplace_back(p);
+
+        std::function<int(int)> find_f = [&](int v) -> int
+        {
+            if (this->xag->var_replace[v] != v)
+                this->xag->var_replace[v] = find_f(this->xag->var_replace[v]);
+
+            return this->xag->var_replace[v];
+        };
+
+        // merge the larger topological order to the smaller one
+        int rootX = find_f(aiger_var(l1));
+        int rootY = find_f(aiger_var(l2));
+        // if (netlist.topo_idx[rootX] < netlist.topo_idx[rootY])
+        if (rootX < rootY)
+            this->xag->var_replace[rootY] = rootX;
+        else
+            this->xag->var_replace[rootX] = rootY;
+
+        for (auto &p : this->skip_pairs[last_id])
+        {
+            rootX = find_f(aiger_var(p.first));
+            rootY = find_f(aiger_var(p.second));
+            // if (netlist.topo_idx[rootX] < netlist.topo_idx[rootY])
+            if (rootX < rootY)
+                this->xag->var_replace[rootY] = rootX;
+            else
+                this->xag->var_replace[rootX] = rootY;
+        }
+    }
+    else if (ret == ret_vals::ret_SAT)
+    {
+        this->rejected_pairs.emplace_back(pair);
+        for (auto &p : this->skip_pairs[last_id])
+            this->rejected_pairs.emplace_back(p);
+    }
+    else
+    {
+        printf("c error: [post proof] unknown result\n");
+        exit(1);
+    }
 }

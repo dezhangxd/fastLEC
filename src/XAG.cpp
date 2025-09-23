@@ -180,6 +180,18 @@ std::unique_ptr<fastLEC::CNF> XAG::construct_cnf_from_this_xag()
             exit(1);
         }
 
+        // for (auto g : this->gates)
+        // {
+        //     printf("g: %c %d %d %d\n",
+        //            g.type == (GateType::NUL || g.type == GateType::PI)
+        //                ? '?'
+        //                : (g.type == GateType::AND2 ? 'A' : 'X'),
+        //            g.output,
+        //            g.inputs[0],
+        //            g.inputs[1]);
+        //     fflush(stdout);
+        // }
+
         this->lmap_xag_to_cnf.resize(2 * (this->max_var + 1));
 
         if (used_lits[0] || used_lits[1])
@@ -200,6 +212,17 @@ std::unique_ptr<fastLEC::CNF> XAG::construct_cnf_from_this_xag()
         for (int i : used_gates)
         {
             const Gate &g = gates[i];
+
+            // printf("g[%d]: %c %d %d %d\n",
+            //        i,
+            //        g.type == (GateType::NUL || g.type == GateType::PI)
+            //            ? '?'
+            //            : (g.type == GateType::AND2 ? 'A' : 'X'),
+            //        g.output,
+            //        g.inputs[0],
+            //        g.inputs[1]);
+            // fflush(stdout);
+
             unsigned lhs = g.output;
             unsigned not_lhs = aiger_not(lhs);
 
@@ -587,7 +610,7 @@ std::shared_ptr<fastLEC::XAG> XAG::extract_sub_graph(std::vector<int> vec_po)
             use_flag[aiger_var(g.output)] = true;
         }
     }
-    gates.resize(j);
+    tmp_gates.resize(j);
     v0 = mp[aiger_pos_lit(v0)] >> 1;
     v1 = mp[aiger_pos_lit(v1)] >> 1;
 
@@ -614,8 +637,10 @@ std::shared_ptr<fastLEC::XAG> XAG::extract_sub_graph(std::vector<int> vec_po)
     std::shared_ptr<fastLEC::XAG> sub_xag = std::make_shared<fastLEC::XAG>();
 
     sub_xag->max_var = mapper_cnt;
+    sub_xag->used_lits.resize(2 * (sub_xag->max_var + 2), false);
     sub_xag->PI.clear();
     sub_xag->used_gates.clear();
+    sub_xag->gates.resize(sub_xag->max_var + 2);
     for (int l : this->PI)
     {
         int v_i = find_father(aiger_var(l));
@@ -624,12 +649,12 @@ std::shared_ptr<fastLEC::XAG> XAG::extract_sub_graph(std::vector<int> vec_po)
     }
     sub_xag->num_PIs_org = sub_xag->PI.size();
 
-    for (auto &g : this->gates)
+    for (auto &g : tmp_gates)
     {
         int o = mapper[g.output];
         int i0 = mapper[g.inputs[0]];
         int i1 = mapper[g.inputs[1]];
-        sub_xag->gates.emplace_back(fastLEC::Gate(o, g.type, i0, i1));
+        sub_xag->gates[aiger_var(o)] = fastLEC::Gate(o, g.type, i0, i1);
         sub_xag->used_gates.emplace_back(aiger_var(o));
     }
 
@@ -638,11 +663,10 @@ std::shared_ptr<fastLEC::XAG> XAG::extract_sub_graph(std::vector<int> vec_po)
         int l0 = aiger_sign(vec_po[0]) ? aiger_neg_lit(v0) : aiger_pos_lit(v0);
         int l1 = aiger_sign(vec_po[1]) ? aiger_neg_lit(v1) : aiger_pos_lit(v1);
         // assert(mp[l0] != mp[l1]); // two cones should be useful
-        l0 = mp[l0], l1 = mp[l1];
-        mapper_cnt += 1;
+        l0 = mapper[l0], l1 = mapper[l1];
         sub_xag->max_var = mapper_cnt;
         sub_xag->PO = aiger_pos_lit(mapper_cnt);
-        sub_xag->gates.emplace_back(fastLEC::Gate(sub_xag->PO, XOR2, l0, l1));
+        sub_xag->gates[mapper_cnt] = fastLEC::Gate(sub_xag->PO, XOR2, l0, l1);
         sub_xag->used_gates.emplace_back(mapper_cnt);
     }
     else if (vec_po.size() == 1)
@@ -660,7 +684,30 @@ std::shared_ptr<fastLEC::XAG> XAG::extract_sub_graph(std::vector<int> vec_po)
     }
 
     // ---------------------------------------------------
-    // step 5: father son mapper
+    // step 5: mark used literals
+    // ---------------------------------------------------
+    sub_xag->used_lits[sub_xag->PO] = true;
+    for (unsigned i = aiger_var(sub_xag->PO); i > sub_xag->PI.size(); i--)
+    {
+        const Gate &g = sub_xag->gates[i];
+        int o = g.output;
+        int i0 = g.inputs[0];
+        int i1 = g.inputs[1];
+        if (g.type == XOR2 || sub_xag->used_lits[o])
+        {
+            sub_xag->used_lits[i0] = true;
+            sub_xag->used_lits[i1] = true;
+        }
+
+        if (g.type == XOR2 || sub_xag->used_lits[aiger_not(o)])
+        {
+            sub_xag->used_lits[aiger_not(i0)] = true;
+            sub_xag->used_lits[aiger_not(i1)] = true;
+        }
+    }
+
+    // ---------------------------------------------------
+    // step 6: father son mapper
     // ---------------------------------------------------
     sub_xag->father_var_mapper.resize(this->max_var + 1, -1);
     sub_xag->son_var_mapper.resize(sub_xag->max_var + 1, -1);

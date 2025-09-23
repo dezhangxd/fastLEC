@@ -36,7 +36,10 @@ public:
     fastLEC::ret_vals logic_simulation();
 
     std::string sub_graph_string;
+    // get the next sub-graph in XAG format
     std::shared_ptr<fastLEC::XAG> next_sub_graph();
+    // the nodes in the last class are proven to be equivalent or not equivalent
+    void post_proof(fastLEC::ret_vals ret);
 };
 
 } // namespace fastLEC

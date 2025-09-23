@@ -380,6 +380,10 @@ Prover::run_sweeping(std::shared_ptr<fastLEC::Sweeper> sweeper)
             printf("%s\n", sweeper->sub_graph_string.c_str());
             fflush(stdout);
         }
+        std::shared_ptr<fastLEC::CNF> cnf =
+            sub_graph->construct_cnf_from_this_xag();
+        ret = this->seq_SAT_kissat(cnf);
+        sweeper->post_proof(ret);
     }
 
     return ret;
