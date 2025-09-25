@@ -100,6 +100,7 @@ public:
 
     std::vector<int> father_var_mapper;
     std::vector<int> son_var_mapper;
+    std::vector<int> mp_xag_to_aig_var; // used to xag->aiger
 
     //---------------------------------------------------
     // format conversion
@@ -107,6 +108,7 @@ public:
     void construct_from_aig(const fastLEC::AIG &aig);
 
     std::unique_ptr<fastLEC::CNF> construct_cnf_from_this_xag();
+    std::shared_ptr<fastLEC::AIG> construct_aig_from_this_xag();
 
     std::vector<int> lmap_xag_to_cnf;
     int to_cnf_var(int xag_var);

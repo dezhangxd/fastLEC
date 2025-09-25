@@ -372,6 +372,7 @@ Prover::run_sweeping(std::shared_ptr<fastLEC::Sweeper> sweeper)
         return ret;
 
     std::shared_ptr<fastLEC::XAG> sub_graph = nullptr;
+    int cnt = 0;
 
     while ((sub_graph = sweeper->next_sub_graph()))
     {
@@ -382,6 +383,11 @@ Prover::run_sweeping(std::shared_ptr<fastLEC::Sweeper> sweeper)
         }
         std::shared_ptr<fastLEC::CNF> cnf =
             sub_graph->construct_cnf_from_this_xag();
+        // auto aig = sub_graph->construct_aig_from_this_xag();
+        // printf("c [CEC] log temp%d.aig\n", cnt);
+        // fflush(stdout);
+        // aig->log("temp" + std::to_string(cnt) + ".aig");
+        cnt++;
         ret = this->seq_SAT_kissat(cnf);
         sweeper->post_proof(ret);
     }

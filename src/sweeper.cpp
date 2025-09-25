@@ -301,7 +301,7 @@ std::shared_ptr<fastLEC::XAG> Sweeper::next_sub_graph()
 
 void Sweeper::post_proof(fastLEC::ret_vals ret)
 {
-    int last_id = this->next_class_idx - 1;
+    unsigned last_id = this->next_class_idx - 1;
     if (last_id >= this->eql_classes.size())
         return;
 

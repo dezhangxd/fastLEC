@@ -2,6 +2,11 @@
 #include "AIG.hpp"
 #include "parser.hpp"
 
+extern "C"
+{
+#include "../deps/aiger/aiger.h"
+}
+
 #include <cassert>
 #include <cstdio>
 #include <iomanip>
@@ -723,4 +728,117 @@ std::shared_ptr<fastLEC::XAG> XAG::extract_sub_graph(std::vector<int> vec_po)
     }
 
     return sub_xag;
+}
+
+std::shared_ptr<fastLEC::AIG> XAG::construct_aig_from_this_xag()
+{
+    std::shared_ptr<fastLEC::AIG> aig = std::make_shared<fastLEC::AIG>();
+    if (aig->get().get() != nullptr)
+    {
+        printf("c [XAG->AIG] warning: this aiger is already initialized\n");
+        aig->get().reset();
+    }
+    aig->get() = aig->create();
+    if (aig->get().get() == nullptr)
+    {
+        printf("c [XAG->AIG] Failed to initialize AIGER\n");
+        return nullptr;
+    }
+
+    this->mp_xag_to_aig_var.resize(this->max_var + 1, 0);
+
+    for (int i : this->PI)
+    {
+        aiger_add_input(aig->get().get(), i, NULL);
+        this->mp_xag_to_aig_var[aiger_var(i)] = aiger_var(i);
+    }
+
+    int cnt = this->PI.size() + 1;
+    for (int i : this->used_gates)
+    {
+        const Gate &g = this->gates[i];
+        if (Param::get().verbose > 3)
+        {
+            printf("g: %c %d %d %d\n",
+                   g.type == (GateType::NUL || g.type == GateType::PI)
+                       ? '?'
+                       : (g.type == GateType::AND2 ? 'A' : 'X'),
+                   g.output,
+                   g.inputs[0],
+                   g.inputs[1]);
+            fflush(stdout);
+        }
+
+        if (g.type == GateType::AND2)
+        {
+            this->mp_xag_to_aig_var[aiger_var(g.output)] = cnt;
+            int v0 = mp_xag_to_aig_var[aiger_var(g.inputs[0])];
+            int v1 = mp_xag_to_aig_var[aiger_var(g.inputs[1])];
+            int l0 =
+                aiger_sign(g.inputs[0]) ? aiger_neg_lit(v0) : aiger_pos_lit(v0);
+            int l1 =
+                aiger_sign(g.inputs[1]) ? aiger_neg_lit(v1) : aiger_pos_lit(v1);
+            aiger_add_and(aig->get().get(), aiger_pos_lit(cnt), l0, l1);
+            if (Param::get().verbose > 3)
+            {
+                printf(
+                    "c [XAG->AIG] AND: %d %d %d\n", aiger_pos_lit(cnt), l0, l1);
+                fflush(stdout);
+            }
+            cnt++;
+        }
+        else if (g.type == GateType::XOR2)
+        {
+            this->mp_xag_to_aig_var[aiger_var(g.output)] = cnt + 2;
+            int v0 = mp_xag_to_aig_var[aiger_var(g.inputs[0])];
+            int v1 = mp_xag_to_aig_var[aiger_var(g.inputs[1])];
+            int l0 =
+                aiger_sign(g.inputs[0]) ? aiger_neg_lit(v0) : aiger_pos_lit(v0);
+            int l1 =
+                aiger_sign(g.inputs[1]) ? aiger_neg_lit(v1) : aiger_pos_lit(v1);
+            int c = aiger_pos_lit(cnt);
+            int d = aiger_pos_lit(cnt + 1);
+            int o = aiger_pos_lit(cnt + 2);
+            aiger_add_and(aig->get().get(), c, l0, l1);
+            aiger_add_and(aig->get().get(), d, aiger_not(l0), aiger_not(l1));
+            aiger_add_and(aig->get().get(), o, aiger_not(c), aiger_not(d));
+            if (Param::get().verbose > 3)
+            {
+                printf("c [XAG->AIG] AND: %d %d %d\n", c, l0, l1);
+                printf("c [XAG->AIG] AND: %d %d %d\n",
+                       d,
+                       aiger_not(l0),
+                       aiger_not(l1));
+                printf("c [XAG->AIG] AND: %d %d %d\n",
+                       o,
+                       aiger_not(c),
+                       aiger_not(d));
+                fflush(stdout);
+            }
+            cnt += 3;
+        }
+        else
+        {
+            printf("Error: gate type is not AND2 or XOR2\n");
+            exit(1);
+        }
+    }
+
+    int o_v = this->mp_xag_to_aig_var[aiger_var(this->PO)];
+    int o_l = aiger_sign(this->PO) ? aiger_neg_lit(o_v) : aiger_pos_lit(o_v);
+    aiger_add_output(aig->get().get(), o_l, 0);
+
+    if (Param::get().verbose > 2)
+    {
+
+        printf("c [XAG->AIG] MILOA: %u %u %u %u %u\n",
+               aig->get()->maxvar,
+               aig->get()->num_inputs,
+               aig->get()->num_latches,
+               aig->get()->num_outputs,
+               aig->get()->num_ands);
+        fflush(stdout);
+    }
+
+    return aig;
 }
