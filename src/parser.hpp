@@ -11,8 +11,9 @@ namespace fastLEC
 // X-Macro defines all modes
 #define MODES_LIST   \
     X(ES)            \
-    X(BDD)           \
     X(pES)           \
+    X(BDD)           \
+    X(pBDD)          \
     X(SAT)           \
     X(pSAT)          \
     X(gpuES)         \

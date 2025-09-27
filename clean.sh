@@ -56,6 +56,17 @@ if [ -d "deps/cudd" ]; then
     cd ../..
 fi
 
+# Clean sylvan submodule
+if [ -d "deps/sylvan" ]; then
+    echo "Cleaning sylvan submodule..."
+    cd deps/sylvan
+    if [ -d "build" ]; then
+        rm -rf build/
+    fi
+    make clean 2>/dev/null || true
+    cd ../..
+fi
+
 echo "Cleanup completed!"
 echo ""
 echo "To rebuild the project:"

@@ -323,6 +323,20 @@ else()
     endif()
 endif()
 
+# Sylvan submodule
+option(USE_SYLVAN "Enable Sylvan support" ON)
+if(USE_SYLVAN AND EXISTS "${CMAKE_SOURCE_DIR}/deps/sylvan/CMakeLists.txt")
+    set(SYLVAN_FOUND TRUE)
+    message(STATUS "Sylvan submodule found and enabled")
+else()
+    set(SYLVAN_FOUND FALSE)
+    if(USE_SYLVAN)
+        message(WARNING "Sylvan submodule not found. Run: git submodule update --init --recursive")
+    else()
+        message(STATUS "Sylvan support disabled")
+    endif()
+endif()
+
 # ========================================
 # AIGER Library
 # ========================================
@@ -513,6 +527,76 @@ if(CUDD_FOUND)
 endif()
 
 # ========================================
+# Sylvan Library
+# ========================================
+if(SYLVAN_FOUND)
+    # Check if Sylvan has been built
+    set(SYLVAN_BUILD_DIR "${CMAKE_SOURCE_DIR}/deps/sylvan/build")
+    set(SYLVAN_LIB_PATH "${SYLVAN_BUILD_DIR}/src/lib/libsylvan.a")
+    
+    if(EXISTS ${SYLVAN_LIB_PATH})
+        # Use the pre-built Sylvan library
+        add_library(sylvan_lib STATIC IMPORTED)
+        set_target_properties(sylvan_lib PROPERTIES
+            IMPORTED_LOCATION ${SYLVAN_LIB_PATH}
+        )
+        target_include_directories(sylvan_lib INTERFACE 
+            "${CMAKE_SOURCE_DIR}/deps/sylvan/src"
+            "${SYLVAN_BUILD_DIR}/_deps/lace-src/src"
+            "${SYLVAN_BUILD_DIR}/_deps/lace-build"
+        )
+        message(STATUS "Using pre-built Sylvan library: ${SYLVAN_LIB_PATH}")
+    else()
+        message(STATUS "Sylvan library not found, building it now...")
+        
+        # Create build directory
+        file(MAKE_DIRECTORY ${SYLVAN_BUILD_DIR})
+        
+        # Configure Sylvan
+        execute_process(
+            COMMAND ${CMAKE_COMMAND} -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} -DSYLVAN_BUILD_TESTS=OFF -DSYLVAN_BUILD_EXAMPLES=OFF -DSYLVAN_BUILD_DOCS=OFF ..
+            WORKING_DIRECTORY ${SYLVAN_BUILD_DIR}
+            RESULT_VARIABLE CONFIGURE_RESULT
+            OUTPUT_VARIABLE CONFIGURE_OUTPUT
+            ERROR_VARIABLE CONFIGURE_ERROR
+        )
+        
+        if(NOT CONFIGURE_RESULT EQUAL 0)
+            message(FATAL_ERROR "Failed to configure Sylvan: ${CONFIGURE_ERROR}")
+        endif()
+        
+        # Build Sylvan
+        execute_process(
+            COMMAND ${CMAKE_COMMAND} --build . --parallel ${CMAKE_BUILD_PARALLEL_LEVEL}
+            WORKING_DIRECTORY ${SYLVAN_BUILD_DIR}
+            RESULT_VARIABLE BUILD_RESULT
+            OUTPUT_VARIABLE BUILD_OUTPUT
+            ERROR_VARIABLE BUILD_ERROR
+        )
+        
+        if(NOT BUILD_RESULT EQUAL 0)
+            message(FATAL_ERROR "Failed to build Sylvan: ${BUILD_ERROR}")
+        endif()
+        
+        # Check if the library was created
+        if(EXISTS ${SYLVAN_LIB_PATH})
+            add_library(sylvan_lib STATIC IMPORTED)
+            set_target_properties(sylvan_lib PROPERTIES
+                IMPORTED_LOCATION ${SYLVAN_LIB_PATH}
+            )
+            target_include_directories(sylvan_lib INTERFACE 
+                "${CMAKE_SOURCE_DIR}/deps/sylvan/src"
+                "${SYLVAN_BUILD_DIR}/_deps/lace-src/src"
+                "${SYLVAN_BUILD_DIR}/_deps/lace-build"
+            )
+            message(STATUS "Successfully built and linked Sylvan library: ${SYLVAN_LIB_PATH}")
+        else()
+            message(FATAL_ERROR "Sylvan library was not created after build")
+        endif()
+    endif()
+endif()
+
+# ========================================
 # Main Application
 # ========================================
 
@@ -532,6 +616,7 @@ set(SOURCES
     src/CNF.cpp
     src/seqSAT.cpp
     src/cudd.cpp
+    src/sylvan.cpp
     src/simu_seq.cpp
     src/simu_para.cpp
     src/sweeper.cpp
@@ -634,6 +719,12 @@ if(EXISTING_SOURCES)
         target_include_directories(fastLEC PRIVATE ${CUDD_INCLUDE_DIRS})
     endif()
     
+    if(SYLVAN_FOUND)
+        target_link_libraries(fastLEC PRIVATE sylvan_lib)
+        # Link lace library for Sylvan
+        target_link_libraries(fastLEC PRIVATE "${SYLVAN_BUILD_DIR}/_deps/lace-build/lib/liblace.a")
+    endif()
+    
     if(XGBOOST_FOUND)
         # XGBoost linking with proper error handling
         find_library(XGBOOST_LIBRARY xgboost PATHS ${CMAKE_SOURCE_DIR}/deps/xgboost/lib NO_DEFAULT_PATH)
@@ -703,6 +794,12 @@ if(BUILD_LIBRARY AND EXISTING_SOURCES)
     
     if(CUDD_FOUND)
         target_link_libraries(fastLEC_lib PUBLIC cudd_lib)
+    endif()
+    
+    if(SYLVAN_FOUND)
+        target_link_libraries(fastLEC_lib PUBLIC sylvan_lib)
+        # Link lace library for Sylvan
+        target_link_libraries(fastLEC_lib PUBLIC "${SYLVAN_BUILD_DIR}/_deps/lace-build/lib/liblace.a")
     endif()
     
     if(XGBOOST_FOUND)
@@ -775,6 +872,8 @@ message(STATUS "Use XGBoost: ${USE_XGBOOST}")
 message(STATUS "XGBoost: ${XGBOOST_FOUND}")
 message(STATUS "Use CUDD: ${USE_CUDD}")
 message(STATUS "CUDD: ${CUDD_FOUND}")
+message(STATUS "Use Sylvan: ${USE_SYLVAN}")
+message(STATUS "Sylvan: ${SYLVAN_FOUND}")
 message(STATUS "CUDA: ${CUDA_ENABLED}")
 message(STATUS "AIGER: ${AIGER_FOUND}")
 message(STATUS "Kissat: ${KISSAT_FOUND}")

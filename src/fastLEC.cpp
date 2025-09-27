@@ -75,12 +75,13 @@ fastLEC::ret_vals Prover::check_cec()
 
     if (Param::get().mode == Mode::BDD || Param::get().mode == Mode::ES ||
         Param::get().mode == Mode::pES || Param::get().mode == Mode::gpuES ||
+        Param::get().mode == Mode::pBDD ||
         Param::get().mode == Mode::SAT_sweeping)
     {
-        bool b_res = fm.aig_to_cnf();
+        bool b_res = fm.aig_to_xag();
         if (!b_res)
         {
-            fprintf(stderr, "c [CEC] Error: Failed to build CNF\n");
+            fprintf(stderr, "c [CEC] Error: Failed to build XAG\n");
             return ret_vals::ret_UNK;
         }
         std::shared_ptr<fastLEC::XAG> xag = fm.get_xag_shared();
@@ -97,6 +98,9 @@ fastLEC::ret_vals Prover::check_cec()
             {
             case Mode::BDD:
                 ret = seq_BDD_cudd(xag);
+                break;
+            case Mode::pBDD:
+                ret = para_BDD_sylvan(xag, Param::get().n_threads);
                 break;
             case Mode::ES:
                 ret = seq_ES(xag);
@@ -372,7 +376,7 @@ Prover::run_sweeping(std::shared_ptr<fastLEC::Sweeper> sweeper)
         return ret;
 
     std::shared_ptr<fastLEC::XAG> sub_graph = nullptr;
-    int cnt = 0;
+    // int cnt = 0;
 
     while ((sub_graph = sweeper->next_sub_graph()))
     {
@@ -387,7 +391,7 @@ Prover::run_sweeping(std::shared_ptr<fastLEC::Sweeper> sweeper)
         // printf("c [CEC] log temp%d.aig\n", cnt);
         // fflush(stdout);
         // aig->log("temp" + std::to_string(cnt) + ".aig");
-        cnt++;
+        // cnt++;
         ret = this->seq_SAT_kissat(cnf);
         sweeper->post_proof(ret);
     }

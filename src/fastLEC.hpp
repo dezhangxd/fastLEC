@@ -91,6 +91,7 @@ public:
 
     // using BDDs for XAG
     fastLEC::ret_vals seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag);
+    fastLEC::ret_vals para_BDD_sylvan(std::shared_ptr<fastLEC::XAG> xag, int n_t = 1);
 
     // using ES to XAG
     fastLEC::ret_vals seq_ES(std::shared_ptr<fastLEC::XAG> xag);
