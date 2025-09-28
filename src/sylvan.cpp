@@ -1,79 +1,97 @@
 #include "fastLEC.hpp"
 #include "parser.hpp"
 #include "basic.hpp"
+#include <mutex>
 
 extern "C" {
 #include "../deps/sylvan/src/sylvan.h"
 #include "../deps/sylvan/src/sylvan_obj.hpp"
+#include "../deps/sylvan/src/sylvan_cache.h"
 }
 
 using namespace fastLEC;
 using namespace sylvan;
 
+namespace {
+    std::shared_ptr<fastLEC::XAG> g_current_xag;
+    std::mutex g_xag_mutex;
+}
+
+void set_current_xag(std::shared_ptr<fastLEC::XAG> xag) {
+    std::lock_guard<std::mutex> lock(g_xag_mutex);
+    g_current_xag = xag;
+}
+
+std::shared_ptr<fastLEC::XAG> get_current_xag() {
+    std::lock_guard<std::mutex> lock(g_xag_mutex);
+    return g_current_xag;
+}
+
+void clear_current_xag() {
+    std::lock_guard<std::mutex> lock(g_xag_mutex);
+    g_current_xag.reset();
+}
+
 TASK_0(fastLEC::ret_vals, miter_build_bdd)
 {
-    Bdd one = Bdd::bddOne(); // the True terminal
-    Bdd zero = Bdd::bddZero(); // the False terminal
+    auto xag = get_current_xag();
+    if (!xag) {
+        printf("c [Sylvan] Error: No XAG object set\n");
+        return fastLEC::ret_vals::ret_UNK;
+    }
 
-    // check if they really are the True/False terminal
-    assert(one.GetBDD() == sylvan_true);
-    assert(zero.GetBDD() == sylvan_false);
+    std::vector<Bdd> vars(xag->max_var+1);
+    for(int pi : xag->PI){
+        int vpi = aiger_var(pi) - 1;
+        vars[vpi] = Bdd::bddVar(vpi);
+    }
 
-    Bdd a = Bdd::bddVar(0); // create a BDD variable x_0
-    Bdd b = Bdd::bddVar(1); // create a BDD variable x_1
+    int cnt = 0;
+    for (int gid : xag->used_gates){
+        Gate &g = xag->gates[gid];
+        int vout = aiger_var(g.output) - 1;
+        int v1 = aiger_var(g.inputs[0]) - 1;
+        int v2 = aiger_var(g.inputs[1]) - 1;
+        Bdd b1 = aiger_sign(g.inputs[0]) ? !vars[v1] : vars[v1];
+        Bdd b2 = aiger_sign(g.inputs[1]) ? !vars[v2] : vars[v2];
+        if(g.type == GateType::AND2){
+            vars[vout] = b1 * b2;
+        }
+        else if (g.type == GateType::XOR2){
+            vars[vout] = b1 ^ b2;
+        }else{
+            assert(false);
+        }
+        if(cnt++ % 10 == 9){
+            if(fastLEC::ResMgr::get().get_runtime() > fastLEC::Param::get().timeout) {
+                return ret_vals::ret_UNK;
+            }
+        }
+    }
+    
+    int vpo = aiger_var(xag->PO) - 1;
 
-    // check if a really is the Boolean formula "x_0"
-    assert(!a.isConstant());
-    assert(a.TopVar() == 0);
-    assert(a.Then() == one);
-    assert(a.Else() == zero);
-
-    // check if b really is the Boolean formula "x_1"
-    assert(!b.isConstant());
-    assert(b.TopVar() == 1);
-    assert(b.Then() == one);
-    assert(b.Else() == zero);
-
-    // compute !a
-    Bdd not_a = !a;
-
-    // check if !!a is really a
-    assert((!not_a) == a);
-
-    // compute a * b and !(!a + !b) and check if they are equivalent
-    Bdd a_and_b = a * b;
-    Bdd not_not_a_or_not_b = !(!a + !b);
-    assert(a_and_b == not_not_a_or_not_b);
-
-    // perform some simple quantification and check the results
-    Bdd ex = a_and_b.ExistAbstract(a); // \exists a . a * b
-    assert(ex == b);
-    Bdd andabs = a.AndAbstract(b, a); // \exists a . a * b using AndAbstract
-    assert(ex == andabs);
-    Bdd univ = a_and_b.UnivAbstract(a); // \forall a . a * b
-    assert(univ == zero);
-
-    // alternative method to get the cube "ab" using bddCube
-    BddSet variables = a * b;
-    std::vector<unsigned char> vec = {1, 1};
-    assert(a_and_b == Bdd::bddCube(variables, vec));
-
-    // test the bddCube method for all combinations
-    assert((!a * !b) == Bdd::bddCube(variables, std::vector<uint8_t>({0, 0})));
-    assert((!a * b)  == Bdd::bddCube(variables, std::vector<uint8_t>({0, 1})));
-    assert((!a)      == Bdd::bddCube(variables, std::vector<uint8_t>({0, 2})));
-    assert((a * !b)  == Bdd::bddCube(variables, std::vector<uint8_t>({1, 0})));
-    assert((a * b)   == Bdd::bddCube(variables, std::vector<uint8_t>({1, 1})));
-    assert((a)       == Bdd::bddCube(variables, std::vector<uint8_t>({1, 2})));
-    assert((!b)      == Bdd::bddCube(variables, std::vector<uint8_t>({2, 0})));
-    assert((b)       == Bdd::bddCube(variables, std::vector<uint8_t>({2, 1})));
-    assert(one       == Bdd::bddCube(variables, std::vector<uint8_t>({2, 2})));
+    if(aiger_sign(xag->PO)){
+        if(vars[vpo] == Bdd::bddOne()){
+            return ret_vals::ret_UNS;
+        } else {
+            return ret_vals::ret_SAT;
+        }
+    } else {
+        if(vars[vpo] == Bdd::bddZero()){
+            return ret_vals::ret_UNS;
+        } else {
+            return ret_vals::ret_SAT;
+        }
+    }
 
     return fastLEC::ret_vals::ret_UNS;
 }
 
-TASK_1(fastLEC::ret_vals, _main, void*, arg)
+TASK_0(fastLEC::ret_vals, _main)
 {
+
+    
     // Initialize Sylvan
     // With starting size of the nodes table 1 << 21, and maximum size 1 << 27.
     // With starting size of the cache table 1 << 20, and maximum size 1 << 20.
@@ -92,32 +110,46 @@ TASK_1(fastLEC::ret_vals, _main, void*, arg)
     // Initialize the BDD module with granularity 1 (cache every operation)
     // A higher granularity (e.g. 6) often results in better performance in practice
     sylvan_init_bdd();
-
-    // Now we can do some simple stuff using the C++ objects.
+    
     fastLEC::ret_vals ret = CALL(miter_build_bdd);
 
+    // 获取 Sylvan 统计信息
+    size_t nodes_filled = 0, nodes_total = 0;
+    sylvan_table_usage(&nodes_filled, &nodes_total);
+    size_t cache_used = cache_getused();
+    size_t cache_size = cache_getsize();
+    
+    // 计算内存使用量并转换为 MB
+    size_t total_memory_bytes = 24ULL * nodes_total + 36ULL * cache_size;
+    double total_memory_mb = total_memory_bytes / (1024.0 * 1024.0);
+    
+    printf("c [pBDD] result = %d, "
+        "[nodes = %zu/%zu, cache = %zu/%zu, memory = %.2f MB]\n", 
+        ret, nodes_filled, nodes_total, cache_used, cache_size, total_memory_mb);
+    fflush(stdout);
+
     // Report statistics (if SYLVAN_STATS is 1 in the configuration)
-    sylvan_stats_report(stdout);
+    // sylvan_stats_report(stdout);
 
     // And quit, freeing memory
     sylvan_quit();
 
     return ret;
-    (void)arg;
 }
 
 fastLEC::ret_vals fastLEC::Prover::para_BDD_sylvan(std::shared_ptr<fastLEC::XAG> xag, int n_t)
 {
-    int n_workers = n_t; // automatically detect number of workers
-    size_t deque_size = 0; // default value for the size of task deques for the workers
+    set_current_xag(xag);
+    
+    int n_workers = n_t;
+    size_t deque_size = 0;
 
-    // Initialize the Lace framework for <n_workers> workers.
     lace_start(n_workers, deque_size);
 
     fastLEC::ret_vals ret = ret_UNK;
-    ret = RUN(_main, NULL);
-
-    // The lace_startup command also exits Lace after _main is completed.
+    ret = RUN(_main);
+    
+    clear_current_xag();
 
     return ret;
 }
