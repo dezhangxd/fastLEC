@@ -10,7 +10,7 @@ extern "C" {
 using namespace fastLEC;
 using namespace sylvan;
 
-VOID_TASK_0(simple_cxx)
+TASK_0(fastLEC::ret_vals, miter_build_bdd)
 {
     Bdd one = Bdd::bddOne(); // the True terminal
     Bdd zero = Bdd::bddZero(); // the False terminal
@@ -68,9 +68,11 @@ VOID_TASK_0(simple_cxx)
     assert((!b)      == Bdd::bddCube(variables, std::vector<uint8_t>({2, 0})));
     assert((b)       == Bdd::bddCube(variables, std::vector<uint8_t>({2, 1})));
     assert(one       == Bdd::bddCube(variables, std::vector<uint8_t>({2, 2})));
+
+    return fastLEC::ret_vals::ret_UNS;
 }
 
-VOID_TASK_1(_main, void*, arg)
+TASK_1(fastLEC::ret_vals, _main, void*, arg)
 {
     // Initialize Sylvan
     // With starting size of the nodes table 1 << 21, and maximum size 1 << 27.
@@ -92,7 +94,7 @@ VOID_TASK_1(_main, void*, arg)
     sylvan_init_bdd();
 
     // Now we can do some simple stuff using the C++ objects.
-    CALL(simple_cxx);
+    fastLEC::ret_vals ret = CALL(miter_build_bdd);
 
     // Report statistics (if SYLVAN_STATS is 1 in the configuration)
     sylvan_stats_report(stdout);
@@ -100,7 +102,7 @@ VOID_TASK_1(_main, void*, arg)
     // And quit, freeing memory
     sylvan_quit();
 
-    // We didn't use arg
+    return ret;
     (void)arg;
 }
 
@@ -112,9 +114,10 @@ fastLEC::ret_vals fastLEC::Prover::para_BDD_sylvan(std::shared_ptr<fastLEC::XAG>
     // Initialize the Lace framework for <n_workers> workers.
     lace_start(n_workers, deque_size);
 
-    RUN(_main, NULL);
+    fastLEC::ret_vals ret = ret_UNK;
+    ret = RUN(_main, NULL);
 
     // The lace_startup command also exits Lace after _main is completed.
 
-    return fastLEC::ret_vals::ret_UNK;
+    return ret;
 }
