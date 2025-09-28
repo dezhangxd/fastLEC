@@ -2,6 +2,8 @@
 #include "parser.hpp"
 #include "basic.hpp"
 #include <mutex>
+#include <thread>
+#include <atomic>
 
 extern "C" {
 #include "../deps/sylvan/src/sylvan.h"
@@ -15,6 +17,11 @@ using namespace sylvan;
 namespace {
     std::shared_ptr<fastLEC::XAG> g_current_xag;
     std::mutex g_xag_mutex;
+    
+    // Force abort control
+    std::atomic<bool> g_force_abort{false};
+    std::thread g_timeout_thread;
+    std::atomic<bool> g_timeout_thread_running{false};
 }
 
 void set_current_xag(std::shared_ptr<fastLEC::XAG> xag) {
@@ -32,12 +39,62 @@ void clear_current_xag() {
     g_current_xag.reset();
 }
 
+// Check if timeout is reached using fastLEC's time functions
+bool is_timeout_reached() {
+    // Check force abort flag
+    if (g_force_abort.load()) {
+        return true;
+    }
+    
+    // Use fastLEC's runtime check
+    return fastLEC::ResMgr::get().get_runtime() > fastLEC::Param::get().timeout;
+}
+
+// Start force timeout control
+void start_force_timeout_control() {
+    if (g_timeout_thread_running.load()) {
+        return;
+    }
+    
+    g_force_abort.store(false);
+    g_timeout_thread_running.store(true);
+    
+    g_timeout_thread = std::thread([&]() {
+        while (g_timeout_thread_running.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50)); // Check every 50ms
+            
+            // Use fastLEC's runtime check
+            if (fastLEC::ResMgr::get().get_runtime() > fastLEC::Param::get().timeout) {
+                g_force_abort.store(true);
+                break;
+            }
+        }
+    });
+}
+
+// Stop force timeout control
+void stop_force_timeout_control() {
+    if (!g_timeout_thread_running.load()) {
+        return;
+    }
+    
+    g_timeout_thread_running.store(false);
+    if (g_timeout_thread.joinable()) {
+        g_timeout_thread.join();
+    }
+    g_force_abort.store(false);
+}
+
 TASK_0(fastLEC::ret_vals, miter_build_bdd)
 {
     auto xag = get_current_xag();
     if (!xag) {
-        printf("c [Sylvan] Error: No XAG object set\n");
         return fastLEC::ret_vals::ret_UNK;
+    }
+    
+    // Check timeout at task start
+    if (is_timeout_reached()) {
+        return ret_vals::ret_UNK;
     }
 
     std::vector<Bdd> vars(xag->max_var+1);
@@ -52,6 +109,11 @@ TASK_0(fastLEC::ret_vals, miter_build_bdd)
         int vout = aiger_var(g.output) - 1;
         int v1 = aiger_var(g.inputs[0]) - 1;
         int v2 = aiger_var(g.inputs[1]) - 1;
+        // Check timeout before BDD operation
+        if(is_timeout_reached()) {
+            return ret_vals::ret_UNK;
+        }
+        
         Bdd b1 = aiger_sign(g.inputs[0]) ? !vars[v1] : vars[v1];
         Bdd b2 = aiger_sign(g.inputs[1]) ? !vars[v2] : vars[v2];
         if(g.type == GateType::AND2){
@@ -62,11 +124,23 @@ TASK_0(fastLEC::ret_vals, miter_build_bdd)
         }else{
             assert(false);
         }
-        if(cnt++ % 10 == 9){
-            if(fastLEC::ResMgr::get().get_runtime() > fastLEC::Param::get().timeout) {
+        
+        // Check timeout after BDD operation
+        if(is_timeout_reached()) {
+            return ret_vals::ret_UNK;
+        }
+        // More frequent timeout checks
+        if(cnt++ % 3 == 2){ // Check every 3 gates for more frequent checks
+            if(is_timeout_reached()) {
                 return ret_vals::ret_UNK;
             }
         }
+    }
+    
+    // Check timeout before result check
+    YIELD_NEWFRAME(); // Let Lace check if interruption is needed
+    if(is_timeout_reached()) {
+        return ret_vals::ret_UNK;
     }
     
     int vpo = aiger_var(xag->PO) - 1;
@@ -113,23 +187,20 @@ TASK_0(fastLEC::ret_vals, _main)
     
     fastLEC::ret_vals ret = CALL(miter_build_bdd);
 
-    // 获取 Sylvan 统计信息
+    // Get Sylvan statistics
     size_t nodes_filled = 0, nodes_total = 0;
     sylvan_table_usage(&nodes_filled, &nodes_total);
     size_t cache_used = cache_getused();
     size_t cache_size = cache_getsize();
     
-    // 计算内存使用量并转换为 MB
+    // Calculate memory usage and convert to MB
     size_t total_memory_bytes = 24ULL * nodes_total + 36ULL * cache_size;
     double total_memory_mb = total_memory_bytes / (1024.0 * 1024.0);
     
-    printf("c [pBDD] result = %d, "
+    printf("c [pBDD] result = %d, workers = %d, "
         "[nodes = %zu/%zu, cache = %zu/%zu, memory = %.2f MB]\n", 
-        ret, nodes_filled, nodes_total, cache_used, cache_size, total_memory_mb);
+        ret, lace_workers(), nodes_filled, nodes_total, cache_used, cache_size, total_memory_mb);
     fflush(stdout);
-
-    // Report statistics (if SYLVAN_STATS is 1 in the configuration)
-    // sylvan_stats_report(stdout);
 
     // And quit, freeing memory
     sylvan_quit();
@@ -141,13 +212,24 @@ fastLEC::ret_vals fastLEC::Prover::para_BDD_sylvan(std::shared_ptr<fastLEC::XAG>
 {
     set_current_xag(xag);
     
+    // Start force timeout control
+    start_force_timeout_control();
+    
     int n_workers = n_t;
     size_t deque_size = 0;
 
     lace_start(n_workers, deque_size);
 
     fastLEC::ret_vals ret = ret_UNK;
-    ret = RUN(_main);
+    try {
+        ret = RUN(_main);
+    } catch (...) {
+        printf("c [Sylvan] Exception occurred during BDD computation\n");
+        ret = ret_UNK;
+    }
+    
+    // Stop force timeout control
+    stop_force_timeout_control();
     
     clear_current_xag();
 
