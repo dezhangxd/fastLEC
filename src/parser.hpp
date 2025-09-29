@@ -35,7 +35,8 @@ namespace fastLEC
     USER_PARAM(use_ies, bool, true, "Enable iES")                                           \
     USER_PARAM(use_pes_pbit, bool, false, "Enable para-bits for para-es")                   \
     USER_PARAM(ies_u64, bool, false, "Enable iES with u64_int, default using long BV for ies")                             \
-    USER_PARAM(seed, int, 0, "Random seed for reproducibility")
+    USER_PARAM(seed, int, 0, "Random seed for reproducibility")                             \
+    USER_PARAM(log_sub_aiger, bool, false, "Log the sub-aiger")                             
 
     // Custom parameters structure (auto-generated)
     struct CustomParams
@@ -68,6 +69,7 @@ namespace fastLEC
 
         // parameters
         std::string input_file;
+        std::string filename;
         Mode mode;
         unsigned n_threads;
         unsigned verbose;

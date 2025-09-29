@@ -34,6 +34,20 @@ bool Prover::read_aiger(const std::string &filename)
     std::string file = filename;
     if (file.empty())
         file = Param::get().input_file;
+    else
+        Param::get().input_file = file;
+
+    size_t last_slash = file.find_last_of('/');
+    std::string filename_only;
+    if (last_slash == std::string::npos)
+        filename_only = file;
+    else
+        filename_only = file.substr(last_slash + 1);
+    size_t last_dot = filename_only.find_last_of('.');
+    if (last_dot != std::string::npos)
+        Param::get().filename = filename_only.substr(0, last_dot);
+    else
+        Param::get().filename = filename_only;
 
     if (Param::get().verbose > 0)
         printf("c [Prover] Start to parsing AIGER file: %s\n", file.c_str());
@@ -376,7 +390,6 @@ Prover::run_sweeping(std::shared_ptr<fastLEC::Sweeper> sweeper)
         return ret;
 
     std::shared_ptr<fastLEC::XAG> sub_graph = nullptr;
-    // int cnt = 0;
 
     while ((sub_graph = sweeper->next_sub_graph()))
     {
@@ -387,11 +400,7 @@ Prover::run_sweeping(std::shared_ptr<fastLEC::Sweeper> sweeper)
         }
         std::shared_ptr<fastLEC::CNF> cnf =
             sub_graph->construct_cnf_from_this_xag();
-        // auto aig = sub_graph->construct_aig_from_this_xag();
-        // printf("c [CEC] log temp%d.aig\n", cnt);
-        // fflush(stdout);
-        // aig->log("temp" + std::to_string(cnt) + ".aig");
-        // cnt++;
+
         ret = this->seq_SAT_kissat(cnf);
         sweeper->post_proof(ret);
     }

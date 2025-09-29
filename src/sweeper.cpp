@@ -3,6 +3,7 @@
 #include <iomanip>
 #include <sstream>
 #include <algorithm>
+#include <string>
 
 
 using namespace fastLEC;
@@ -298,7 +299,26 @@ std::shared_ptr<fastLEC::XAG> Sweeper::next_sub_graph()
         sub_graph_string += oss.str();
     }
     this->next_class_idx++;
+
+    if(Param::get().custom_params.log_sub_aiger)
+    {
+        this->tmp_next_graph = sub_xag;
+        this->log_next_sub_aiger();
+        this->tmp_next_graph  = nullptr;
+    }
+
     return sub_xag;
+}
+
+void Sweeper::log_next_sub_aiger()
+{
+    auto aig = tmp_next_graph->construct_aig_from_this_xag();
+
+    std::string log_file = "./";
+    log_file += "/" + Param::get().filename;
+    log_file += "_" + std::to_string(this->next_class_idx) + ".aig";
+    printf("c [log] log file: %s\n", log_file.c_str());
+    aig->log(log_file);
 }
 
 void Sweeper::post_proof(fastLEC::ret_vals ret)
