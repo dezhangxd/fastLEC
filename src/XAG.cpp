@@ -13,6 +13,7 @@ extern "C"
 #include <iostream>
 #include <stdexcept>
 #include <algorithm>
+#include <queue>
 
 using namespace fastLEC;
 
