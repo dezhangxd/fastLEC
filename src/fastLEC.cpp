@@ -12,17 +12,20 @@ fastLEC::ret_vals Prover::fast_aig_check(std::shared_ptr<fastLEC::AIG> aig)
     if (!aig)
     {
         fprintf(stderr, "c [CEC] Error: AIG not properly initialized\n");
+        fflush(stderr);
         return ret_vals::ret_UNK;
     }
 
     if (aig->get()->outputs[0].lit == 0)
     {
         printf("c [CEC] PO-const-0: netlist is unsatisfiable\n");
+        fflush(stdout);
         return ret_vals::ret_UNS;
     }
     else if (aig->get()->outputs[0].lit == 1)
     {
         printf("c [CEC] PO-const-1: netlist is valid\n");
+        fflush(stdout);
         return ret_vals::ret_SAT;
     }
     return ret_vals::ret_UNK;
@@ -84,6 +87,9 @@ fastLEC::ret_vals Prover::check_cec()
 
     ret_vals ret = ret_vals::ret_UNK;
     ret = fast_aig_check(aig);
+    if(ret != ret_vals::ret_UNK)
+        return ret;
+
     FormatManager fm;
     fm.set_aig(aig);
 
@@ -398,11 +404,20 @@ Prover::run_sweeping(std::shared_ptr<fastLEC::Sweeper> sweeper)
             printf("%s\n", sweeper->sub_graph_string.c_str());
             fflush(stdout);
         }
+
+        // ret = fast_aig_check(sub_graph->construct_aig_from_this_xag());
+        // if(ret != ret_vals::ret_UNK)
+        //     continue;
+
         std::shared_ptr<fastLEC::CNF> cnf =
             sub_graph->construct_cnf_from_this_xag();
 
         ret = this->seq_SAT_kissat(cnf);
+
         sweeper->post_proof(ret);
+
+        if(ret == ret_vals::ret_UNK && !Param::get().custom_params.log_sub_aiger)
+            break;
     }
 
     return ret;

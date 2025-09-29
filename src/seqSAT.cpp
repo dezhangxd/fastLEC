@@ -42,6 +42,10 @@ ret_vals fastLEC::Prover::seq_SAT_kissat(std::shared_ptr<fastLEC::CNF> cnf)
     }
 
     double time_resource = Param::get().timeout - fastLEC::ResMgr::get().get_runtime();
+    if(Param::get().custom_params.log_sub_aiger)
+    {
+        time_resource = 5.0;
+    }
     
     std::function<void()> func = [solver, time_resource]()
     {

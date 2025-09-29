@@ -36,7 +36,8 @@ namespace fastLEC
     USER_PARAM(use_pes_pbit, bool, false, "Enable para-bits for para-es")                   \
     USER_PARAM(ies_u64, bool, false, "Enable iES with u64_int, default using long BV for ies")                             \
     USER_PARAM(seed, int, 0, "Random seed for reproducibility")                             \
-    USER_PARAM(log_sub_aiger, bool, false, "Log the sub-aiger")                             
+    USER_PARAM(log_sub_aiger, bool, false, "Log the sub-aiger")                             \
+    USER_PARAM(log_dir, std::string, "./", "Log directory")                                 
 
     // Custom parameters structure (auto-generated)
     struct CustomParams
@@ -91,18 +92,7 @@ namespace fastLEC
 #define USER_PARAM(param_name, type, default_val, description)            \
     if (name == #param_name)                                              \
     {                                                                     \
-        if constexpr (std::is_same<type, bool>::value)                         \
-        {                                                                 \
-            custom_params.param_name = (value == "true" || value == "1"); \
-        }                                                                 \
-        else if constexpr (std::is_same<type, int>::value)                     \
-        {                                                                 \
-            custom_params.param_name = std::stoi(value);                  \
-        }                                                                 \
-        else if constexpr (std::is_same<type, double>::value)                  \
-        {                                                                 \
-            custom_params.param_name = std::stod(value);                  \
-        }                                                                 \
+        setCustomParamValue<type>(custom_params.param_name, value);       \
         return;                                                           \
     }
             USER_PARAMS
@@ -113,12 +103,83 @@ namespace fastLEC
             exit(1);
         }
 
+    private:
+        template<typename T>
+        void setCustomParamValue(T& param, const std::string& value)
+        {
+            if constexpr (std::is_same<T, bool>::value)
+            {
+                param = (value == "true" || value == "1");
+            }
+            else if constexpr (std::is_same<T, int>::value)
+            {
+                param = std::stoi(value);
+            }
+            else if constexpr (std::is_same<T, double>::value)
+            {
+                param = std::stod(value);
+            }
+            else if constexpr (std::is_same<T, std::string>::value)
+            {
+                param = value;
+            }
+        }
+
+        template<typename T>
+        void printDefaultValue(const T& default_val)
+        {
+            if constexpr (std::is_same<T, bool>::value)
+            {
+                printf("%s", static_cast<bool>(default_val) ? "true" : "false");
+            }
+            else if constexpr (std::is_same<T, int>::value)
+            {
+                printf("%d", static_cast<int>(default_val));
+            }
+            else if constexpr (std::is_same<T, double>::value)
+            {
+                printf("%g", static_cast<double>(default_val));
+            }
+            else if constexpr (std::is_same<T, std::string>::value)
+            {
+                printf("\"%s\"", static_cast<std::string>(default_val).c_str());
+            }
+        }
+
+        template<typename T>
+        void printParamValue(const T& value)
+        {
+            if constexpr (std::is_same<T, bool>::value)
+            {
+                printf("%s", static_cast<bool>(value) ? "true" : "false");
+            }
+            else if constexpr (std::is_same<T, int>::value)
+            {
+                printf("%d", static_cast<int>(value));
+            }
+            else if constexpr (std::is_same<T, double>::value)
+            {
+                printf("%g", static_cast<double>(value));
+            }
+            else if constexpr (std::is_same<T, std::string>::value)
+            {
+                printf("\"%s\"", static_cast<std::string>(value).c_str());
+            }
+        }
+
+    public:
+
         template <typename T>
         T getCustomParam(const std::string &name) const
         {
 #define USER_PARAM(param_name, type, default_val, description) \
     if (name == #param_name)                                   \
-        return custom_params.param_name;
+    {                                                          \
+        if constexpr (std::is_same<type, T>::value)           \
+            return custom_params.param_name;                   \
+        else                                                   \
+            throw std::runtime_error("Type mismatch for parameter: " + name); \
+    }
             USER_PARAMS
 #undef USER_PARAM
 
@@ -146,18 +207,7 @@ namespace fastLEC
                 printf("c Custom Parameters:\n");
 #define USER_PARAM(param_name, type, default_val, description)     \
     printf("c     %-20s %s [default: ", #param_name, description); \
-    if constexpr (std::is_same<type, bool>::value)                      \
-    {                                                              \
-        printf("%s", static_cast<bool>(default_val) ? "true" : "false"); \
-    }                                                              \
-    else if constexpr (std::is_same<type, int>::value)                  \
-    {                                                              \
-        printf("%d", static_cast<int>(default_val));               \
-    }                                                              \
-    else if constexpr (std::is_same<type, double>::value)               \
-    {                                                              \
-        printf("%g", static_cast<double>(default_val));            \
-    }                                                              \
+    printDefaultValue<type>(default_val);                          \
     printf("]\n");
                 USER_PARAMS
 #undef USER_PARAM
@@ -285,18 +335,9 @@ namespace fastLEC
 #define USER_PARAM(param_name, type, default_val, description)                                                \
     if (p.custom_params.param_name != default_val)                                                            \
     {                                                                                                         \
-        if constexpr (std::is_same<type, bool>::value)                                                             \
-        {                                                                                                     \
-            printf("c [parser] usr:%s = %s\n", #param_name, p.custom_params.param_name ? "true" : "false");   \
-        }                                                                                                     \
-        else if constexpr (std::is_same<type, int>::value)                                                         \
-        {                                                                                                     \
-            printf("c [parser] usr:%s = %d\n", #param_name, static_cast<int>(p.custom_params.param_name));    \
-        }                                                                                                     \
-        else if constexpr (std::is_same<type, double>::value)                                                      \
-        {                                                                                                     \
-            printf("c [parser] usr:%s = %g\n", #param_name, static_cast<double>(p.custom_params.param_name)); \
-        }                                                                                                     \
+        printf("c [parser] usr:%s = ", #param_name);                                                          \
+        p.printParamValue<type>(p.custom_params.param_name);                                                  \
+        printf("\n");                                                                                         \
     }
                 USER_PARAMS
 #undef USER_PARAM

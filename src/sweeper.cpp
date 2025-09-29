@@ -1,5 +1,6 @@
 #include "fastLEC.hpp"
 #include "parser.hpp"
+#include <cstdio>
 #include <iomanip>
 #include <sstream>
 #include <algorithm>
@@ -298,9 +299,10 @@ std::shared_ptr<fastLEC::XAG> Sweeper::next_sub_graph()
             << "}, PI= " << sub_xag->PI.size();
         sub_graph_string += oss.str();
     }
+
     this->next_class_idx++;
 
-    if(Param::get().custom_params.log_sub_aiger)
+    if(sub_xag && Param::get().custom_params.log_sub_aiger)
     {
         this->tmp_next_graph = sub_xag;
         this->log_next_sub_aiger();
@@ -314,7 +316,7 @@ void Sweeper::log_next_sub_aiger()
 {
     auto aig = tmp_next_graph->construct_aig_from_this_xag();
 
-    std::string log_file = "./";
+    std::string log_file = Param::get().custom_params.log_dir;
     log_file += "/" + Param::get().filename;
     log_file += "_" + std::to_string(this->next_class_idx) + ".aig";
     printf("c [log] log file: %s\n", log_file.c_str());
@@ -323,6 +325,9 @@ void Sweeper::log_next_sub_aiger()
 
 void Sweeper::post_proof(fastLEC::ret_vals ret)
 {
+    if(ret == ret_vals::ret_UNK && Param::get().custom_params.log_sub_aiger)
+        ret = ret_vals::ret_UNS;
+
     unsigned last_id = this->next_class_idx - 1;
     if (last_id >= this->eql_classes.size())
         return;
@@ -372,7 +377,7 @@ void Sweeper::post_proof(fastLEC::ret_vals ret)
     }
     else
     {
-        printf("c error: [post proof] unknown result\n");
-        exit(1);
+        printf("c error or timeout: [post proof] unknown result\n");
+        fflush(stdout);
     }
 }
