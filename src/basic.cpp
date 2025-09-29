@@ -1,6 +1,7 @@
 #include "basic.hpp"
 
 #include <cstring>
+#include <cinttypes>
 
 using namespace fastLEC;
 
@@ -23,7 +24,9 @@ double ResMgr::get_runtime() const
         return 0.0;
     }
     auto clk_now = std::chrono::high_resolution_clock::now();
-    return std::chrono::duration_cast<std::chrono::duration<double>>(clk_now - _start_time).count();
+    return std::chrono::duration_cast<std::chrono::duration<double>>(
+               clk_now - _start_time)
+        .count();
 }
 
 void ResMgr::reset_timer()
@@ -32,8 +35,7 @@ void ResMgr::reset_timer()
 }
 
 // Random number generation implementations
-template <typename T>
-T ResMgr::random(T min, T max)
+template <typename T> T ResMgr::random(T min, T max)
 {
     if constexpr (std::is_integral_v<T>)
     {
@@ -58,26 +60,24 @@ template int ResMgr::random<int>(int min, int max);
 template double ResMgr::random<double>(double min, double max);
 template bv_unit_t ResMgr::random<bv_unit_t>(bv_unit_t min, bv_unit_t max);
 
-void ResMgr::set_seed(uint32_t seed)
-{
-    _rng.seed(seed);
-}
+void ResMgr::set_seed(uint32_t seed) { _rng.seed(seed); }
 
 // ----------------------------------------------------------------------------
 // Bitset
 // ----------------------------------------------------------------------------
 
-BitVector::BitVector(int width)
-{
-    this->resize(width);
-}
+BitVector::BitVector(int width) { this->resize(width); }
 
 void BitVector::resize(int width)
 {
     _width = width;
     if (_width % unit_width != 0)
     {
-        printf("c [BitVector] error: nBits %lu is not a multiple of bit_width %d\n", _width, unit_width);
+        printf("c [BitVector] error: nBits %" PRIu64
+               " is not a multiple of bit_width "
+               "%d\n",
+               _width,
+               unit_width);
         exit(0);
     }
     _array.resize(_width / unit_width);
@@ -109,15 +109,9 @@ size_t BitVector::_std_hash_bit_vector() const
 }
 
 // -------------------------------------------------
-void BitVector::set()
-{
-    std::fill(_array.begin(), _array.end(), ~0ull);
-}
+void BitVector::set() { std::fill(_array.begin(), _array.end(), ~0ull); }
 
-void BitVector::reset()
-{
-    std::fill(_array.begin(), _array.end(), 0ull);
-}
+void BitVector::reset() { std::fill(_array.begin(), _array.end(), 0ull); }
 
 void BitVector::random()
 {
@@ -219,13 +213,12 @@ void BitVector::reset(bv_unit_t i)
     _array[id] = _array[id] & ~(1ull << (unit_width - pos - 1));
 }
 
-const uint64_t festivals[6] = {
-    0xAAAAAAAAAAAAAAAA,
-    0xCCCCCCCCCCCCCCCC,
-    0xF0F0F0F0F0F0F0F0,
-    0xFF00FF00FF00FF00,
-    0xFFFF0000FFFF0000,
-    0xFFFFFFFF00000000};
+const uint64_t festivals[6] = {0xAAAAAAAAAAAAAAAA,
+                               0xCCCCCCCCCCCCCCCC,
+                               0xF0F0F0F0F0F0F0F0,
+                               0xFF00FF00FF00FF00,
+                               0xFFFF0000FFFF0000,
+                               0xFFFFFFFF00000000};
 
 void BitVector::u64_pi(bv_unit_t pi_id)
 {
@@ -325,20 +318,21 @@ BitVector BitVector::operator--()
     return *this;
 }
 
-namespace fastLEC {
-    std::ostream &operator<<(std::ostream &os, const BitVector &bv)
+namespace fastLEC
+{
+std::ostream &operator<<(std::ostream &os, const BitVector &bv)
+{
+    int ct = 0;
+    for (unsigned i = 0; i < bv._array.size(); i++)
     {
-        int ct = 0;
-        for (unsigned i = 0; i < bv._array.size(); i++)
+        for (unsigned j = 0; j < bv.unit_width; j++)
         {
-            for (unsigned j = 0; j < bv.unit_width; j++)
-            {
-                os << ((bv._array[i] >> (bv.unit_width - j - 1)) & 1);
-                if (ct % 8 == 7)
-                    os << " ";
-                ct++;
-            }
+            os << ((bv._array[i] >> (bv.unit_width - j - 1)) & 1);
+            if (ct % 8 == 7)
+                os << " ";
+            ct++;
         }
-        return os;
     }
+    return os;
 }
+} // namespace fastLEC

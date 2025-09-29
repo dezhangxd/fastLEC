@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstring>
+#include <cinttypes>
 
 using namespace fastLEC;
 
@@ -31,7 +32,7 @@ void fastLEC::ISimulator::prt_bvec(bvec_t *vec)
 {
     for (bvec_t i = 0; i < BVEC_SIZE; i++)
     {
-        printf("%lu", (*vec >> i) & 1);
+        printf("%" PRIu64, (*vec >> i) & 1);
     }
     printf("\n");
 }
@@ -595,7 +596,7 @@ ret_vals fastLEC::Simulator::run_es()
     }
 
     printf("c [EPS] result = %d [bv:para:batch=%d:%d:%d] [bv_w = %3d]"
-           "[nGates = %5lu] [nPI = %3lu] [round = %lu] [time = %.2f]\n",
+           "[nGates = %5zu] [nPI = %3zu] [round = %" PRIu64 "] [time = %.2f]\n",
            ret,
            this->bv_bits,
            this->para_bits,
