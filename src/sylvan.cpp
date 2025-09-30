@@ -178,7 +178,14 @@ TASK_0(fastLEC::ret_vals, _main)
     // - 1<<25 cache: 1152 MB
     // - 1<<26 cache: 2304 MB
     // - 1<<27 cache: 4608 MB
-    sylvan_set_sizes(1LL<<22, 1LL<<26, 1LL<<22, 1LL<<26);
+    // - 1<<28 cache: 9216 MB
+    // - 1<<29 cache: 18 GB
+    // - 1<<30 cache: 36 GB
+    // - 1<<31 cache: 72 GB
+    // - 1<<32 cache: 144 GB
+
+    // sylvan_set_sizes(1LL<<22, 1LL<<26, 1LL<<22, 1LL<<26); //default
+    sylvan_set_sizes(1LL<<22, 1LL<<31, 1LL<<22, 1LL<<31); // 50G
     sylvan_init_package();
 
     // Initialize the BDD module with granularity 1 (cache every operation)
