@@ -1,6 +1,6 @@
 #include "CNF.hpp"
 #include <iomanip>
-
+#include <fstream>
 #include "AIG.hpp"
 
 using namespace fastLEC;
@@ -27,6 +27,22 @@ std::ostream &operator<<(std::ostream &os, const fastLEC::CNF &cnf)
     return os;
 }
 
+void fastLEC::CNF::log_cnf(const std::string &filename)
+{
+    std::ofstream file(filename);
+    file << "p cnf " << num_vars << " " << num_clauses() << std::endl;
+    int start_pos = 0, end_pos = 0;
+    for (int i = 0; i < this->num_clauses(); i++)
+    {
+        end_pos = this->cls_end_pos[i];
+        for (int j = start_pos; j < end_pos; j++)
+            file << this->lits[j] << " ";
+        start_pos = end_pos;
+        file << "0" << std::endl;
+    }
+    file.close();
+}
+
 void fastLEC::CNF::add_clause(const std::vector<int> &clause)
 {
     lits.insert(lits.end(), clause.begin(), clause.end());
@@ -42,7 +58,8 @@ void fastLEC::CNF::add_clause(const std::vector<int> &clause)
 
 void fastLEC::CNF::add_a_variable(int xag_var)
 {
-    // printf("add_a_variable %d -> num_vars %d\n", xag_var, this->num_vars + 1);
+    // printf("add_a_variable %d -> num_vars %d\n", xag_var, this->num_vars +
+    // 1);
     this->num_vars++;
     if (use_mapper)
         this->vmap_cnf_to_xag.push_back(xag_var);

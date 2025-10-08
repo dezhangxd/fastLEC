@@ -37,8 +37,8 @@ namespace fastLEC
     USER_PARAM(ies_u64, bool, false, "Enable iES with u64_int, default using long BV for ies")                             \
     USER_PARAM(seed, int, 0, "Random seed for reproducibility")                             \
     USER_PARAM(log_sub_aiger, bool, false, "Log the sub-aiger")                             \
-    USER_PARAM(log_dir, std::string, "./", "Log directory")                                 
-
+    USER_PARAM(log_sub_cnfs, bool, false, "Log the CNFs of sub-graphs")                     \
+    USER_PARAM(log_dir, std::string, "./", "Log directory")                                 \
     // Custom parameters structure (auto-generated)
     struct CustomParams
     {

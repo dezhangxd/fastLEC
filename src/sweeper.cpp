@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <string>
 
-
 using namespace fastLEC;
 
 void Sweeper::clear()
@@ -302,14 +301,31 @@ std::shared_ptr<fastLEC::XAG> Sweeper::next_sub_graph()
 
     this->next_class_idx++;
 
-    if(sub_xag && Param::get().custom_params.log_sub_aiger)
+    if (sub_xag && Param::get().custom_params.log_sub_aiger)
     {
         this->tmp_next_graph = sub_xag;
         this->log_next_sub_aiger();
-        this->tmp_next_graph  = nullptr;
+        this->tmp_next_graph = nullptr;
+    }
+    if (sub_xag && Param::get().custom_params.log_sub_cnfs)
+    {
+        this->tmp_next_graph = sub_xag;
+        this->log_next_sub_cnfs();
+        this->tmp_next_graph = nullptr;
     }
 
     return sub_xag;
+}
+
+void Sweeper::log_next_sub_cnfs()
+{
+    auto cnf = tmp_next_graph->construct_cnf_from_this_xag();
+
+    std::string log_file = Param::get().custom_params.log_dir;
+    log_file += "/" + Param::get().filename;
+    log_file += "_" + std::to_string(this->next_class_idx) + ".cnf";
+    printf("c [log] log file: %s\n", log_file.c_str());
+    cnf->log_cnf(log_file);
 }
 
 void Sweeper::log_next_sub_aiger()
@@ -320,12 +336,15 @@ void Sweeper::log_next_sub_aiger()
     log_file += "/" + Param::get().filename;
     log_file += "_" + std::to_string(this->next_class_idx) + ".aig";
     printf("c [log] log file: %s\n", log_file.c_str());
+
     aig->log(log_file);
 }
 
 void Sweeper::post_proof(fastLEC::ret_vals ret)
 {
-    if(ret == ret_vals::ret_UNK && Param::get().custom_params.log_sub_aiger)
+    if (ret == ret_vals::ret_UNK &&
+        (Param::get().custom_params.log_sub_aiger ||
+         Param::get().custom_params.log_sub_cnfs))
         ret = ret_vals::ret_UNS;
 
     unsigned last_id = this->next_class_idx - 1;

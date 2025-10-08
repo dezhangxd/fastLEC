@@ -87,7 +87,7 @@ fastLEC::ret_vals Prover::check_cec()
 
     ret_vals ret = ret_vals::ret_UNK;
     ret = fast_aig_check(aig);
-    if(ret != ret_vals::ret_UNK)
+    if (ret != ret_vals::ret_UNK)
         return ret;
 
     FormatManager fm;
@@ -416,7 +416,9 @@ Prover::run_sweeping(std::shared_ptr<fastLEC::Sweeper> sweeper)
 
         sweeper->post_proof(ret);
 
-        if(ret == ret_vals::ret_UNK && !Param::get().custom_params.log_sub_aiger)
+        if (ret == ret_vals::ret_UNK &&
+            !Param::get().custom_params.log_sub_aiger &&
+            !Param::get().custom_params.log_sub_cnfs)
             break;
     }
 

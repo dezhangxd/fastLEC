@@ -41,21 +41,26 @@ ret_vals fastLEC::Prover::seq_SAT_kissat(std::shared_ptr<fastLEC::CNF> cnf)
         kissat_add(solver.get(), 0);
     }
 
-    double time_resource = Param::get().timeout - fastLEC::ResMgr::get().get_runtime();
-    if(Param::get().custom_params.log_sub_aiger)
+    double time_resource =
+        Param::get().timeout - fastLEC::ResMgr::get().get_runtime();
+    if (Param::get().custom_params.log_sub_aiger ||
+        Param::get().custom_params.log_sub_cnfs)
     {
         time_resource = 5.0;
     }
-    
+
     std::function<void()> func = [solver, time_resource]()
     {
         const double check_interval = 0.05;
         auto start_time = std::chrono::high_resolution_clock::now();
-        while (std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::high_resolution_clock::now() - start_time).count() < time_resource)
+        while (std::chrono::duration_cast<std::chrono::duration<double>>(
+                   std::chrono::high_resolution_clock::now() - start_time)
+                   .count() < time_resource)
         {
-            std::this_thread::sleep_for(std::chrono::duration<double>(check_interval));
+            std::this_thread::sleep_for(
+                std::chrono::duration<double>(check_interval));
         }
-        
+
         if (solver)
             kissat_terminate(solver.get());
     };
@@ -67,8 +72,13 @@ ret_vals fastLEC::Prover::seq_SAT_kissat(std::shared_ptr<fastLEC::CNF> cnf)
 
     if (fastLEC::Param::get().verbose > 0)
     {
-        printf("c [SAT] result = %d [var = %d, clause = %d, lit = %d] [time = %.2f]\n",
-               ret, cnf->num_vars, cnf->num_clauses(), cnf->num_lits(), fastLEC::ResMgr::get().get_runtime() - start_time);
+        printf("c [SAT] result = %d [var = %d, clause = %d, lit = %d] [time = "
+               "%.2f]\n",
+               ret,
+               cnf->num_vars,
+               cnf->num_clauses(),
+               cnf->num_lits(),
+               fastLEC::ResMgr::get().get_runtime() - start_time);
     }
 
     return ret_vals(ret);

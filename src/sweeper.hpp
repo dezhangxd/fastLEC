@@ -27,7 +27,7 @@ class Sweeper
     std::vector<std::pair<int, int>> rejected_pairs;
 
     std::shared_ptr<fastLEC::XAG> tmp_next_graph = nullptr;
-    
+
 public:
     Sweeper() = default;
     Sweeper(std::shared_ptr<fastLEC::XAG> xag) : xag(xag) {}
@@ -41,6 +41,7 @@ public:
     // get the next sub-graph in XAG format
     std::shared_ptr<fastLEC::XAG> next_sub_graph();
     void log_next_sub_aiger();
+    void log_next_sub_cnfs();
     // the nodes in the last class are proven to be equivalent or not equivalent
     void post_proof(fastLEC::ret_vals ret);
 };
