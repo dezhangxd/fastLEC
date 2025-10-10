@@ -4,10 +4,8 @@
 #include <vector>
 #include <mutex>
 #include <thread>
-#include <future>
 #include <memory>
 #include <atomic>
-#include <functional>
 #include <condition_variable>
 
 #include "XAG.hpp"
@@ -30,8 +28,6 @@ namespace fastLEC
 
 class Task;
 class ThreadPool;
-class TaskManager;
-
 // extern std::shared_mutex _prt_mtx;
 
 // ----------------------------------------------------------------------------
@@ -87,37 +83,72 @@ enum task_states
 class Task
 {
 public:
-    Task(std::shared_ptr<TaskManager> tm);
+    Task();
     ~Task() = default;
 
-    std::shared_ptr<TaskManager> task_manager;
     // states state;
     std::atomic<task_states> state;
-    std::atomic<bool> can_terminate;
-    std::atomic<bool> paused;
-    // std::atomic<int> is_adding;
-    std::shared_ptr<kissat> solver;
 
-    int id, cpu;
+    int id, cpu;               // task id, cpu id
+    std::vector<int> cubes;    // task cubes
+    unsigned new_cube_lit_cnt; // new cube lit count
 
-    double create_time, start_time, stop_time;
+    double create_time, // create time
+        start_time,     // start solving time
+        stop_time;      // stop solving time
     double runtime() const;
 
-    void terminate();
-
-    int father;
+    int father;                         // father task id
     std::vector<std::vector<int>> sons; // vectors of Twins, Quadruplets, ...
-    std::vector<int> cubes;
-
-    unsigned new_cube_lits;
-    unsigned level;
     unsigned split_ct() const { return sons.size(); }
+
+    unsigned level;
+
+    void terminate_info_upd();
 
     bool is_root() const { return id == ID_ROOT; }
 
-    void set_state(task_states s) { state.store(s, std::memory_order_release); }
+    void set_state(task_states s) { state.store(s, std::memory_order_relaxed); }
 
     friend std::ostream &operator<<(std::ostream &os, const Task &t);
+};
+
+class ThreadPool
+{
+private:
+    unsigned n_threads;
+    std::shared_ptr<fastLEC::CNF> root_cnf;
+
+    std::vector<std::thread> workers;
+    std::vector<int> cpu_task_ids;
+    std::vector<std::unique_ptr<std::mutex>> mutexes;
+    std::vector<std::shared_ptr<kissat>> solvers;
+
+    SQueue<int> q_wait_ids;                       // waiting to be added tasks
+    SQueue<int> q_prop_ids;                       // newly solved tasks
+    std::vector<std::shared_ptr<Task>> all_tasks; // vector to save all tasks
+
+    std::atomic<bool> stop;
+    std::atomic<bool> running_cpu_cnt;
+
+    void worker_func(int cpu_id);
+
+public:
+    ThreadPool(unsigned n_threads, std::shared_ptr<fastLEC::CNF> cnf);
+    ~ThreadPool();
+
+    std::shared_ptr<Task> get_task_by_cpu(int cpu_id);
+    std::shared_ptr<Task> get_task_by_id(int task_id);
+
+    void submit_task(std::shared_ptr<Task> task);
+
+    void terminate_task_by_id(int task_id);
+    void terminate_task_by_cpu(int cpu_id);
+    void terminate_all_tasks();
+
+    std::shared_ptr<kissat> get_solver(int cpu_id);
+
+    ret_vals check();
 };
 
 class pSAT
@@ -126,6 +157,7 @@ class pSAT
     std::shared_ptr<fastLEC::CNF> cnf;
 
     unsigned n_threads;
+    std::unique_ptr<ThreadPool> thread_pool;
 
 public:
     pSAT(std::shared_ptr<fastLEC::XAG> xag, unsigned n_threads);

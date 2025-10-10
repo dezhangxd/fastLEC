@@ -98,7 +98,8 @@ fastLEC::ret_vals Prover::check_cec()
     if (Param::get().mode == Mode::BDD || Param::get().mode == Mode::ES ||
         Param::get().mode == Mode::pES || Param::get().mode == Mode::gpuES ||
         Param::get().mode == Mode::pBDD ||
-        Param::get().mode == Mode::SAT_sweeping)
+        Param::get().mode == Mode::SAT_sweeping ||
+        Param::get().mode == Mode::pSAT_sweeping)
     {
         bool b_res = fm.aig_to_xag();
         if (!b_res)
@@ -393,7 +394,7 @@ fastLEC::ret_vals Prover::para_SAT_pSAT(std::shared_ptr<fastLEC::XAG> xag,
 {
     fastLEC::ret_vals ret = ret_vals::ret_UNK;
 
-    class fastLEC::pSAT ps(xag, n_t);
+    class fastLEC::pSAT ps(xag, static_cast<unsigned>(n_t));
 
     ret = ps.check_xag();
 
@@ -427,7 +428,6 @@ Prover::run_sweeping(std::shared_ptr<fastLEC::Sweeper> sweeper)
         //     sub_graph->construct_cnf_from_this_xag();
 
         // ret = this->seq_SAT_kissat(cnf);
-
         ret = this->para_SAT_pSAT(sub_graph, Param::get().n_threads);
 
         sweeper->post_proof(ret);
