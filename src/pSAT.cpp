@@ -179,13 +179,23 @@ fastLEC::ThreadPool::~ThreadPool()
 
 void fastLEC::ThreadPool::worker_func(int cpu_id)
 {
-    while (!stop.load() && all_tasks[0]->state != UNSATISFIABLE)
+    int free_cnt = 0;
+    while (!stop.load())
     {
         int id = ID_NONE;
 
         if (!q_wait_ids.try_pop(id))
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            free_cnt++;
+            if (free_cnt > 100)
+            {
+                free_cnt = 0;
+                std::shared_ptr<Task> task = pick_split_task();
+                if (task)
+                    split_task_and_submit(task);
+                
+            }
             continue;
         }
 
@@ -229,16 +239,34 @@ void fastLEC::ThreadPool::worker_func(int cpu_id)
         {
             task->set_state(RUNNING);
             result = kissat_solve(solvers[cpu_id].get());
+            printf("c [pSAT] Worker %d solving task %d result = %d\n",
+                   cpu_id,
+                   task->id,
+                   result);
+            fflush(stdout);
 
             if (result == 0)
             {
                 q_prop_ids.emplace(std::move(id));
                 task->set_state(UNKNOW);
             }
-            else if (result == 10)
-                task->set_state(SATISFIABLE);
-            else if (result == 20)
-                task->set_state(UNSATISFIABLE);
+            else
+            {
+                if (result == 10)
+                    task->set_state(SATISFIABLE);
+                else if (result == 20)
+                    task->set_state(UNSATISFIABLE);
+                else
+                    task->set_state(UNKNOW);
+
+                if (task->id == ID_ROOT)
+                {
+                    terminate_all_tasks();
+                    stop.store(true);
+                    printf("c [pSAT] Worker %d stopping\n", cpu_id);
+                    fflush(stdout);
+                }
+            }
         }
         task->terminate_info_upd();
         {
@@ -269,13 +297,13 @@ void fastLEC::ThreadPool::submit_task(std::shared_ptr<Task> task)
     if (task)
     {
         task->create_time = fastLEC::ResMgr::get().get_runtime();
-        int task_id = task->id;
+        int task_id = task->id = (int)all_tasks.size();
         all_tasks.push_back(std::move(task));
         q_wait_ids.emplace(std::move(task_id));
     }
 }
 
-std::shared_ptr<kissat> fastLEC::ThreadPool::get_solver(int cpu_id)
+std::shared_ptr<kissat> fastLEC::ThreadPool::get_solver_by_cpu(int cpu_id)
 {
     if (cpu_id < 0 || cpu_id >= static_cast<int>(n_threads))
     {
@@ -340,20 +368,52 @@ fastLEC::ret_vals fastLEC::ThreadPool::check()
         return ret_vals::ret_UNK;
 }
 
+std::shared_ptr<fastLEC::Task> fastLEC::ThreadPool::pick_split_task()
+{
+    return get_task_by_id(0);
+}
+
+bool fastLEC::ThreadPool::split_task_and_submit(
+    std::shared_ptr<fastLEC::Task> task)
+{
+    int split_v =
+        (fastLEC::ResMgr::get().random(0, root_cnf->num_vars) + 1) - 1;
+    std::shared_ptr<fastLEC::Task> new_task1 =
+        std::make_shared<fastLEC::Task>();
+    std::shared_ptr<fastLEC::Task> new_task2 =
+        std::make_shared<fastLEC::Task>();
+
+    new_task1->father = task->id;
+    task->sons.push_back({(int)num_tasks(), (int)num_tasks() + 1});
+    new_task1->level = task->level + 1;
+    new_task1->cubes = task->cubes;
+    new_task1->cubes.push_back(split_v);
+    new_task1->new_cube_lit_cnt = 1;
+    submit_task(std::move(new_task1));
+
+    new_task2->father = task->id;
+    new_task2->level = task->level + 1;
+    new_task2->cubes = task->cubes;
+    new_task2->cubes.push_back(-split_v);
+    new_task2->new_cube_lit_cnt = 1;
+    submit_task(std::move(new_task2));
+    return true;
+}
+
 // ----------------------------------------------------------------------
 
 fastLEC::pSAT::pSAT(std::shared_ptr<fastLEC::XAG> xag, unsigned n_threads)
     : xag(xag), n_threads(n_threads)
 {
     cnf = xag->construct_cnf_from_this_xag();
-    thread_pool = std::make_unique<ThreadPool>(n_threads, cnf);
+    tp = std::make_unique<ThreadPool>(n_threads, cnf);
 }
 
 fastLEC::ret_vals fastLEC::pSAT::check_xag()
 {
     double start_time = fastLEC::ResMgr::get().get_runtime();
 
-    ret_vals ret = thread_pool->check();
+    ret_vals ret = tp->check();
 
     if (fastLEC::Param::get().verbose > 0)
     {

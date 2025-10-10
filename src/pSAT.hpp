@@ -107,6 +107,10 @@ public:
     void terminate_info_upd();
 
     bool is_root() const { return id == ID_ROOT; }
+    bool is_solved() const
+    {
+        return state == SATISFIABLE || state == UNSATISFIABLE;
+    }
 
     void set_state(task_states s) { state.store(s, std::memory_order_relaxed); }
 
@@ -146,7 +150,11 @@ public:
     void terminate_task_by_cpu(int cpu_id);
     void terminate_all_tasks();
 
-    std::shared_ptr<kissat> get_solver(int cpu_id);
+    std::shared_ptr<fastLEC::Task> pick_split_task();
+    bool split_task_and_submit(std::shared_ptr<fastLEC::Task> xag);
+
+    std::shared_ptr<kissat> get_solver_by_cpu(int cpu_id);
+    unsigned num_tasks() const { return all_tasks.size(); }
 
     ret_vals check();
 };
@@ -157,7 +165,7 @@ class pSAT
     std::shared_ptr<fastLEC::CNF> cnf;
 
     unsigned n_threads;
-    std::unique_ptr<ThreadPool> thread_pool;
+    std::unique_ptr<ThreadPool> tp;
 
 public:
     pSAT(std::shared_ptr<fastLEC::XAG> xag, unsigned n_threads);
