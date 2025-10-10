@@ -1,6 +1,5 @@
 #pragma once
 
-
 #include <queue>
 #include <vector>
 #include <mutex>
@@ -13,19 +12,18 @@
 
 #include "XAG.hpp"
 #include "CNF.hpp"
-
+#include "basic.hpp"
 
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
-#include "lib/kissat/src/kissat.h"
+#include "../deps/kissat/src/kissat.h"
 
 #ifdef __cplusplus
 }
 #endif
-
 
 namespace fastLEC
 {
@@ -34,12 +32,12 @@ class Task;
 class ThreadPool;
 class TaskManager;
 
+// extern std::shared_mutex _prt_mtx;
 
 // ----------------------------------------------------------------------------
 // Safe Queue
 // ----------------------------------------------------------------------------
-template <typename T>
-class SQueue
+template <typename T> class SQueue
 {
     std::queue<T> q;
     mutable std::mutex _mtx;
@@ -52,7 +50,6 @@ public:
     bool try_pop(T &item);
     T pop();
 };
-
 
 // ----------------------------------------------------------------------------
 // task status
@@ -74,16 +71,16 @@ public:
 // ========================================================
 //            x(term)
 // waiting -> adding -> running ------------+-> SAT/UNSAT
-//  |            |          \              /    
+//  |            |           \             /
 //  + -----------+------------+--> unknown
 enum task_states
 {
-    WAITING, // waiting in the pool
-    ADDING,  // construct the cnf
-    RUNNING, // start SAT solving
-    SAT,     // get a SAT result
-    UNSAT,   // get a SAT result
-    UNKNOW,  // be cutted
+    WAITING,       // waiting in the pool
+    ADDING,        // construct the cnf
+    RUNNING,       // start SAT solving
+    SATISFIABLE,   // get a SAT result
+    UNSATISFIABLE, // get a UNSAT result
+    UNKNOW,        // be cutted
 };
 // ----------------------------------------------------------------------------
 
@@ -118,29 +115,23 @@ public:
 
     bool is_root() const { return id == ID_ROOT; }
 
-    bool is_waiting() const { return state.load(std::memory_order_acquire) == states::WAITING; }
-    bool is_adding() const { return state.load(std::memory_order_acquire) == states::ADDING; }
-    bool is_running() const { return state.load(std::memory_order_acquire) == states::RUNNING; }
-    bool is_terminated() const { return state.load(std::memory_order_acquire) == states::UNKNOW; }
-    bool is_sat() const { return state.load(std::memory_order_acquire) == states::SAT; }
-    bool is_unsat() const { return state.load(std::memory_order_acquire) == states::UNSAT; }
-    bool has_solved() const { return state.load(std::memory_order_acquire) == states::SAT || state.load(std::memory_order_acquire) == states::UNSAT; }
-
-    void set_state(states s) { state.store(s, std::memory_order_release); }
+    void set_state(task_states s) { state.store(s, std::memory_order_release); }
 
     friend std::ostream &operator<<(std::ostream &os, const Task &t);
 };
-
-
-
-
-
 
 class pSAT
 {
     std::shared_ptr<fastLEC::XAG> xag;
     std::shared_ptr<fastLEC::CNF> cnf;
 
+    unsigned n_threads;
+
+public:
+    pSAT(std::shared_ptr<fastLEC::XAG> xag, unsigned n_threads);
+    ~pSAT() = default;
+
+    fastLEC::ret_vals check_xag();
 };
 
 } // namespace fastLEC

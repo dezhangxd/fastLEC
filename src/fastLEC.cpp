@@ -1,6 +1,8 @@
 #include "fastLEC.hpp"
 #include "parser.hpp"
 #include "basic.hpp"
+#include "pSAT.hpp"
+
 #include <cstddef>
 #include <cstdio>
 #include <memory>
@@ -386,6 +388,18 @@ bool FormatManager::load_aig_and_convert_to_cnf(const std::string &filename)
     return aig_to_cnf();
 }
 
+fastLEC::ret_vals Prover::para_SAT_pSAT(std::shared_ptr<fastLEC::XAG> xag,
+                                        int n_t)
+{
+    fastLEC::ret_vals ret = ret_vals::ret_UNK;
+
+    class fastLEC::pSAT ps(xag, n_t);
+
+    ret = ps.check_xag();
+
+    return ret;
+}
+
 fastLEC::ret_vals
 Prover::run_sweeping(std::shared_ptr<fastLEC::Sweeper> sweeper)
 {
@@ -409,10 +423,12 @@ Prover::run_sweeping(std::shared_ptr<fastLEC::Sweeper> sweeper)
         // if(ret != ret_vals::ret_UNK)
         //     continue;
 
-        std::shared_ptr<fastLEC::CNF> cnf =
-            sub_graph->construct_cnf_from_this_xag();
+        // std::shared_ptr<fastLEC::CNF> cnf =
+        //     sub_graph->construct_cnf_from_this_xag();
 
-        ret = this->seq_SAT_kissat(cnf);
+        // ret = this->seq_SAT_kissat(cnf);
+
+        ret = this->para_SAT_pSAT(sub_graph, Param::get().n_threads);
 
         sweeper->post_proof(ret);
 

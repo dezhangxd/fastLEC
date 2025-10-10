@@ -88,12 +88,16 @@ public:
 
     // using SAT solvers to solve CNF
     fastLEC::ret_vals seq_SAT_kissat(std::shared_ptr<fastLEC::CNF> cnf);
+    // using pSAT solvers to solve XAG
+    fastLEC::ret_vals para_SAT_pSAT(std::shared_ptr<fastLEC::XAG> xag,
+                                    int n_t = 1);
 
     // using BDDs for XAG
     fastLEC::ret_vals seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag);
-    fastLEC::ret_vals para_BDD_sylvan(std::shared_ptr<fastLEC::XAG> xag, int n_t = 1);
+    fastLEC::ret_vals para_BDD_sylvan(std::shared_ptr<fastLEC::XAG> xag,
+                                      int n_t = 1);
 
-    // using ES to XAG
+    // using ES for XAG
     fastLEC::ret_vals seq_ES(std::shared_ptr<fastLEC::XAG> xag);
     fastLEC::ret_vals para_ES(std::shared_ptr<fastLEC::XAG> xag, int n_t = 1);
     fastLEC::ret_vals gpu_ES(std::shared_ptr<fastLEC::XAG> xag);
