@@ -6,6 +6,7 @@
 #include <thread>
 #include <memory>
 #include <atomic>
+#include <shared_mutex>
 #include <condition_variable>
 
 #include "XAG.hpp"
@@ -23,12 +24,13 @@ extern "C"
 }
 #endif
 
+extern std::shared_mutex _prt_mtx;
+
 namespace fastLEC
 {
 
 class Task;
 class PartitionSAT;
-// extern std::shared_mutex _prt_mtx;
 
 // ----------------------------------------------------------------------------
 // Safe Queue
@@ -132,7 +134,6 @@ private:
     std::vector<std::unique_ptr<std::mutex>> mutexes;
     std::vector<std::shared_ptr<kissat>> solvers;
 
-    std::atomic<bool> all_task_terminated;
     SQueue<int> q_wait_ids;                       // waiting to be added tasks
     SQueue<int> q_prop_ids;                       // newly solved tasks
     std::vector<std::shared_ptr<Task>> all_tasks; // vector to save all tasks
@@ -144,6 +145,11 @@ private:
     std::atomic<bool> timeout_thread_running;
 
     void worker_func(int cpu_id);
+
+    double prt_time_interval = 0.5; // seconds
+    int prt_alltask_interval = 50;  // task number interval
+    std::atomic<bool> states_updated;
+    std::atomic<bool> all_task_terminated;
     void timeout_monitor_func();
 
 public:
@@ -164,6 +170,9 @@ public:
 
     std::shared_ptr<kissat> get_solver_by_cpu(int cpu_id);
     unsigned num_tasks() const { return all_tasks.size(); }
+
+    std::string show_current_running_tasks();
+    friend std::ostream &operator<<(std::ostream &os, const PartitionSAT &ps);
 
     ret_vals check();
 };

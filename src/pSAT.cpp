@@ -3,12 +3,13 @@
 
 #include <iomanip>
 #include <cassert>
+#include <shared_mutex>
 
 // ----------------------------------------------------------------------------
 // related to SQueue
 // ----------------------------------------------------------------------------
 
-// std::shared_mutex _prt_mtx;
+std::shared_mutex _prt_mtx;
 
 template <typename T> bool fastLEC::SQueue<T>::empty() const
 {
@@ -73,8 +74,10 @@ double fastLEC::Task::runtime() const
 {
     if (stop_time > 0.0)
         return stop_time - start_time;
-    else
+    else if (start_time > 0.0)
         return fastLEC::ResMgr::get().get_runtime() - start_time;
+    else
+        return -1.0;
 }
 
 void fastLEC::Task::terminate_info_upd()
@@ -93,7 +96,7 @@ std::ostream &fastLEC::operator<<(std::ostream &os, const Task &t)
 {
     os << "T[";
     if (t.state == task_states::WAITING)
-        os << "-";
+        os << "W";
     else if (t.state == task_states::ADDING)
         os << "A";
     else if (t.state == task_states::RUNNING)
@@ -141,9 +144,57 @@ std::ostream &fastLEC::operator<<(std::ostream &os, const Task &t)
 // PartitionSAT class implementation
 // ----------------------------------------------------------------------------
 
+std::string fastLEC::PartitionSAT::show_current_running_tasks()
+{
+    std::stringstream ss;
+    for (auto &task : all_tasks)
+    {
+        if (!task->is_solved())
+        {
+            ss << "c [p] " << std::setw(6) << task->father;
+            ss << " <f-";
+            ss << std::setw(6) << task->id << " : ";
+            for (auto &cube : task->cubes)
+                ss << std::setw(5) << cube << " ";
+            ss << " | ";
+            ss << *task;
+            ss << std::endl;
+        }
+    }
+    return ss.str();
+}
+
+std::ostream &fastLEC::operator<<(std::ostream &os, const PartitionSAT &ps)
+{
+    unsigned line_ct = 3;
+    std::stringstream ss;
+    ss << "c [Q] TaskPool: " << ps.all_tasks.size() << " tasks, ";
+    ss << std::endl;
+    ss << "c [Q] ";
+    for (unsigned i = 0; i < ps.all_tasks.size(); i++)
+    {
+        ss << std::right << std::setw(3) << i;
+        ss << ":";
+        std::stringstream tmp;
+        tmp << *ps.all_tasks[i];
+        ss << std::left << std::setw(60) << tmp.str();
+        if (i % line_ct == line_ct - 1)
+            ss << "\nc [Q] ";
+    }
+
+    {
+        std::lock_guard<std::shared_mutex> lock(_prt_mtx);
+        os << ss.str() << "\n" << std::flush;
+    }
+
+    return os;
+}
+
 fastLEC::PartitionSAT::PartitionSAT(std::shared_ptr<fastLEC::XAG> xag,
                                     unsigned n_threads)
-    : xag(xag), n_threads(n_threads), stop(false), timeout_thread_running(false)
+    : xag(xag), n_threads(n_threads), stop(false),
+      timeout_thread_running(false), states_updated(false),
+      all_task_terminated(false)
 {
     root_cnf = xag->construct_cnf_from_this_xag();
 
@@ -282,9 +333,53 @@ void fastLEC::PartitionSAT::worker_func(int cpu_id)
 
 void fastLEC::PartitionSAT::timeout_monitor_func()
 {
+
+    double last_prt_time = 0;
+    int last_task_num = -prt_alltask_interval - 1;
     while (timeout_thread_running.load())
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+        if (fastLEC::ResMgr::get().get_runtime() - last_prt_time >
+            prt_time_interval)
+        {
+            last_prt_time = fastLEC::ResMgr::get().get_runtime();
+
+            {
+                std::stringstream ss;
+                ss << "c [CPU states] "
+                      "+++++++++++++++++++++++++++++++++++++++++\n";
+                ss << "c [CPU states] " << fastLEC::ResMgr::get().get_runtime()
+                   << "s\n";
+                ss << show_current_running_tasks();
+                ss << "c [CPU states] "
+                      "----------------------------------------";
+
+                std::lock_guard<std::shared_mutex> lock(_prt_mtx);
+                std::cout << ss.str() << std::endl;
+            }
+
+            if ((int)this->all_tasks.size() - last_task_num >
+                prt_alltask_interval)
+            {
+                last_task_num = this->all_tasks.size();
+                std::stringstream ss;
+                ss << "c [task states] "
+                      "+++++++++++++++++++++++++++++++++++++++++\n";
+                ss << "c [task states] " << this->all_tasks.size()
+                   << " tasks\n";
+                ss << *this;
+                ss << "c [task states] "
+                      "+++++++++++++++++++++++++++++++++++++++++\n";
+
+                last_task_num = this->all_tasks.size();
+
+                std::lock_guard<std::shared_mutex> lock(_prt_mtx);
+                std::cout << ss.str();
+            }
+
+            // states_updated.store(false);
+        }
 
         if (stop.load())
             break;
