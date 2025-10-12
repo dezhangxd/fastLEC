@@ -132,6 +132,7 @@ private:
     std::vector<std::unique_ptr<std::mutex>> mutexes;
     std::vector<std::shared_ptr<kissat>> solvers;
 
+    std::atomic<bool> all_task_terminated;
     SQueue<int> q_wait_ids;                       // waiting to be added tasks
     SQueue<int> q_prop_ids;                       // newly solved tasks
     std::vector<std::shared_ptr<Task>> all_tasks; // vector to save all tasks
@@ -139,7 +140,11 @@ private:
     std::atomic<bool> stop;
     std::atomic<bool> running_cpu_cnt;
 
+    std::thread timeout_thread;
+    std::atomic<bool> timeout_thread_running;
+
     void worker_func(int cpu_id);
+    void timeout_monitor_func();
 
 public:
     PartitionSAT(std::shared_ptr<fastLEC::XAG> xag, unsigned n_threads);

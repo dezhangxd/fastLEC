@@ -142,10 +142,12 @@ std::ostream &fastLEC::operator<<(std::ostream &os, const Task &t)
 // ----------------------------------------------------------------------------
 
 fastLEC::PartitionSAT::PartitionSAT(std::shared_ptr<fastLEC::XAG> xag,
-                                unsigned n_threads)
-    : xag(xag), n_threads(n_threads), stop(false)
+                                    unsigned n_threads)
+    : xag(xag), n_threads(n_threads), stop(false), timeout_thread_running(false)
 {
     root_cnf = xag->construct_cnf_from_this_xag();
+
+    all_task_terminated.store(false);
 
     solvers.resize(n_threads, nullptr);
 
@@ -164,11 +166,22 @@ fastLEC::PartitionSAT::PartitionSAT(std::shared_ptr<fastLEC::XAG> xag,
 
     for (unsigned i = 0; i < n_threads; ++i)
         workers.emplace_back(&PartitionSAT::worker_func, this, i);
+
+    // start timeout monitor thread
+    timeout_thread_running.store(true);
+    timeout_thread = std::thread(&PartitionSAT::timeout_monitor_func, this);
 }
 
 fastLEC::PartitionSAT::~PartitionSAT()
 {
     stop.store(true);
+
+    // stop timeout monitor thread
+    timeout_thread_running.store(false);
+    if (timeout_thread.joinable())
+    {
+        timeout_thread.join();
+    }
 
     for (auto &worker : workers)
     {
@@ -240,11 +253,6 @@ void fastLEC::PartitionSAT::worker_func(int cpu_id)
         {
             task->set_state(RUNNING);
             result = kissat_solve(solvers[cpu_id].get());
-            printf("c [pSAT] Worker %d solving task %d result = %d\n",
-                   cpu_id,
-                   task->id,
-                   result);
-            fflush(stdout);
 
             if (result == 0)
             {
@@ -261,12 +269,7 @@ void fastLEC::PartitionSAT::worker_func(int cpu_id)
                     task->set_state(UNKNOW);
 
                 if (task->id == ID_ROOT)
-                {
                     terminate_all_tasks();
-                    stop.store(true);
-                    printf("c [pSAT] Worker %d stopping\n", cpu_id);
-                    fflush(stdout);
-                }
             }
         }
         task->terminate_info_upd();
@@ -277,7 +280,30 @@ void fastLEC::PartitionSAT::worker_func(int cpu_id)
     }
 }
 
-std::shared_ptr<fastLEC::Task> fastLEC::PartitionSAT::get_task_by_cpu(int cpu_id)
+void fastLEC::PartitionSAT::timeout_monitor_func()
+{
+    while (timeout_thread_running.load())
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+        if (stop.load())
+            break;
+
+        if (fastLEC::ResMgr::get().get_runtime() >
+            fastLEC::Param::get().timeout)
+        {
+            printf("c [pSAT] Timeout reached (%.2fs), terminating all tasks\n",
+                   fastLEC::Param::get().timeout);
+            fflush(stdout);
+
+            terminate_all_tasks();
+            break;
+        }
+    }
+}
+
+std::shared_ptr<fastLEC::Task>
+fastLEC::PartitionSAT::get_task_by_cpu(int cpu_id)
 {
     if (cpu_id < 0 || cpu_id >= static_cast<int>(n_threads))
         return nullptr;
@@ -286,7 +312,8 @@ std::shared_ptr<fastLEC::Task> fastLEC::PartitionSAT::get_task_by_cpu(int cpu_id
     return get_task_by_id(cpu_task_ids[cpu_id]);
 }
 
-std::shared_ptr<fastLEC::Task> fastLEC::PartitionSAT::get_task_by_id(int task_id)
+std::shared_ptr<fastLEC::Task>
+fastLEC::PartitionSAT::get_task_by_id(int task_id)
 {
     if (task_id < 0 || task_id > (int)all_tasks.size())
         return nullptr;
@@ -345,6 +372,11 @@ void fastLEC::PartitionSAT::terminate_task_by_cpu(int cpu_id)
 void fastLEC::PartitionSAT::terminate_all_tasks()
 {
     stop.store(true);
+
+    if (all_task_terminated.load())
+        return;
+
+    all_task_terminated.store(true);
 
     for (unsigned i = 0; i < n_threads; i++)
         terminate_task_by_cpu(i);

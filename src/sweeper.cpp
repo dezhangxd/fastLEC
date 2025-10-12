@@ -396,7 +396,9 @@ void Sweeper::post_proof(fastLEC::ret_vals ret)
     }
     else
     {
-        printf("c error or timeout: [post proof] unknown result\n");
+        if (fastLEC::ResMgr::get().get_runtime() <
+            fastLEC::Param::get().timeout)
+            printf("c [post proof] ERROR : unknown result\n");
         fflush(stdout);
     }
 }
