@@ -394,9 +394,9 @@ fastLEC::ret_vals Prover::para_SAT_pSAT(std::shared_ptr<fastLEC::XAG> xag,
 {
     fastLEC::ret_vals ret = ret_vals::ret_UNK;
 
-    class fastLEC::pSAT ps(xag, static_cast<unsigned>(n_t));
+    class fastLEC::PartitionSAT ps(xag, static_cast<unsigned>(n_t));
 
-    ret = ps.check_xag();
+    ret = ps.check();
 
     return ret;
 }

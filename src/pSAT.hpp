@@ -27,7 +27,7 @@ namespace fastLEC
 {
 
 class Task;
-class ThreadPool;
+class PartitionSAT;
 // extern std::shared_mutex _prt_mtx;
 
 // ----------------------------------------------------------------------------
@@ -117,11 +117,15 @@ public:
     friend std::ostream &operator<<(std::ostream &os, const Task &t);
 };
 
-class ThreadPool
+// a thread pool based SAT solver
+class PartitionSAT
 {
 private:
-    unsigned n_threads;
+    std::shared_ptr<fastLEC::XAG> xag;
     std::shared_ptr<fastLEC::CNF> root_cnf;
+
+private:
+    unsigned n_threads;
 
     std::vector<std::thread> workers;
     std::vector<int> cpu_task_ids;
@@ -138,8 +142,8 @@ private:
     void worker_func(int cpu_id);
 
 public:
-    ThreadPool(unsigned n_threads, std::shared_ptr<fastLEC::CNF> cnf);
-    ~ThreadPool();
+    PartitionSAT(std::shared_ptr<fastLEC::XAG> xag, unsigned n_threads);
+    ~PartitionSAT();
 
     std::shared_ptr<Task> get_task_by_cpu(int cpu_id);
     std::shared_ptr<Task> get_task_by_id(int task_id);
@@ -165,13 +169,13 @@ class pSAT
     std::shared_ptr<fastLEC::CNF> cnf;
 
     unsigned n_threads;
-    std::unique_ptr<ThreadPool> tp;
+    std::unique_ptr<PartitionSAT> tp;
 
 public:
     pSAT(std::shared_ptr<fastLEC::XAG> xag, unsigned n_threads);
     ~pSAT() = default;
 
-    fastLEC::ret_vals check_xag();
+    fastLEC::ret_vals check();
 };
 
 } // namespace fastLEC

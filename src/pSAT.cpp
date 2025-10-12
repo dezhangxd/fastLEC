@@ -138,13 +138,15 @@ std::ostream &fastLEC::operator<<(std::ostream &os, const Task &t)
 }
 
 // ----------------------------------------------------------------------------
-// ThreadPool class implementation
+// PartitionSAT class implementation
 // ----------------------------------------------------------------------------
 
-fastLEC::ThreadPool::ThreadPool(unsigned n_threads,
-                                std::shared_ptr<fastLEC::CNF> cnf)
-    : n_threads(n_threads), root_cnf(cnf), stop(false)
+fastLEC::PartitionSAT::PartitionSAT(std::shared_ptr<fastLEC::XAG> xag,
+                                unsigned n_threads)
+    : xag(xag), n_threads(n_threads), stop(false)
 {
+    root_cnf = xag->construct_cnf_from_this_xag();
+
     solvers.resize(n_threads, nullptr);
 
     std::shared_ptr<Task> root_task = std::make_shared<Task>();
@@ -161,10 +163,10 @@ fastLEC::ThreadPool::ThreadPool(unsigned n_threads,
         mutexes.emplace_back(std::make_unique<std::mutex>());
 
     for (unsigned i = 0; i < n_threads; ++i)
-        workers.emplace_back(&ThreadPool::worker_func, this, i);
+        workers.emplace_back(&PartitionSAT::worker_func, this, i);
 }
 
-fastLEC::ThreadPool::~ThreadPool()
+fastLEC::PartitionSAT::~PartitionSAT()
 {
     stop.store(true);
 
@@ -177,7 +179,7 @@ fastLEC::ThreadPool::~ThreadPool()
     }
 }
 
-void fastLEC::ThreadPool::worker_func(int cpu_id)
+void fastLEC::PartitionSAT::worker_func(int cpu_id)
 {
     int free_cnt = 0;
     while (!stop.load())
@@ -194,7 +196,6 @@ void fastLEC::ThreadPool::worker_func(int cpu_id)
                 std::shared_ptr<Task> task = pick_split_task();
                 if (task)
                     split_task_and_submit(task);
-                
             }
             continue;
         }
@@ -276,7 +277,7 @@ void fastLEC::ThreadPool::worker_func(int cpu_id)
     }
 }
 
-std::shared_ptr<fastLEC::Task> fastLEC::ThreadPool::get_task_by_cpu(int cpu_id)
+std::shared_ptr<fastLEC::Task> fastLEC::PartitionSAT::get_task_by_cpu(int cpu_id)
 {
     if (cpu_id < 0 || cpu_id >= static_cast<int>(n_threads))
         return nullptr;
@@ -285,14 +286,14 @@ std::shared_ptr<fastLEC::Task> fastLEC::ThreadPool::get_task_by_cpu(int cpu_id)
     return get_task_by_id(cpu_task_ids[cpu_id]);
 }
 
-std::shared_ptr<fastLEC::Task> fastLEC::ThreadPool::get_task_by_id(int task_id)
+std::shared_ptr<fastLEC::Task> fastLEC::PartitionSAT::get_task_by_id(int task_id)
 {
     if (task_id < 0 || task_id > (int)all_tasks.size())
         return nullptr;
     return all_tasks[task_id];
 }
 
-void fastLEC::ThreadPool::submit_task(std::shared_ptr<Task> task)
+void fastLEC::PartitionSAT::submit_task(std::shared_ptr<Task> task)
 {
     if (task)
     {
@@ -303,7 +304,7 @@ void fastLEC::ThreadPool::submit_task(std::shared_ptr<Task> task)
     }
 }
 
-std::shared_ptr<kissat> fastLEC::ThreadPool::get_solver_by_cpu(int cpu_id)
+std::shared_ptr<kissat> fastLEC::PartitionSAT::get_solver_by_cpu(int cpu_id)
 {
     if (cpu_id < 0 || cpu_id >= static_cast<int>(n_threads))
     {
@@ -312,7 +313,7 @@ std::shared_ptr<kissat> fastLEC::ThreadPool::get_solver_by_cpu(int cpu_id)
     return solvers[cpu_id];
 }
 
-void fastLEC::ThreadPool::terminate_task_by_id(int task_id)
+void fastLEC::PartitionSAT::terminate_task_by_id(int task_id)
 {
 
     std::shared_ptr<Task> task = get_task_by_id(task_id);
@@ -329,7 +330,7 @@ void fastLEC::ThreadPool::terminate_task_by_id(int task_id)
     }
 }
 
-void fastLEC::ThreadPool::terminate_task_by_cpu(int cpu_id)
+void fastLEC::PartitionSAT::terminate_task_by_cpu(int cpu_id)
 {
     std::lock_guard<std::mutex> lock(*mutexes[cpu_id]);
     if (cpu_task_ids[cpu_id] != ID_NONE)
@@ -341,7 +342,7 @@ void fastLEC::ThreadPool::terminate_task_by_cpu(int cpu_id)
     }
 }
 
-void fastLEC::ThreadPool::terminate_all_tasks()
+void fastLEC::PartitionSAT::terminate_all_tasks()
 {
     stop.store(true);
 
@@ -352,28 +353,12 @@ void fastLEC::ThreadPool::terminate_all_tasks()
         t->terminate_info_upd();
 }
 
-fastLEC::ret_vals fastLEC::ThreadPool::check()
-{
-    for (auto &worker : workers)
-    {
-        if (worker.joinable())
-            worker.join();
-    }
-
-    if (all_tasks[0]->state == SATISFIABLE)
-        return ret_vals::ret_SAT;
-    else if (all_tasks[0]->state == UNSATISFIABLE)
-        return ret_vals::ret_UNS;
-    else
-        return ret_vals::ret_UNK;
-}
-
-std::shared_ptr<fastLEC::Task> fastLEC::ThreadPool::pick_split_task()
+std::shared_ptr<fastLEC::Task> fastLEC::PartitionSAT::pick_split_task()
 {
     return get_task_by_id(0);
 }
 
-bool fastLEC::ThreadPool::split_task_and_submit(
+bool fastLEC::PartitionSAT::split_task_and_submit(
     std::shared_ptr<fastLEC::Task> task)
 {
     int split_v =
@@ -400,29 +385,33 @@ bool fastLEC::ThreadPool::split_task_and_submit(
     return true;
 }
 
-// ----------------------------------------------------------------------
-
-fastLEC::pSAT::pSAT(std::shared_ptr<fastLEC::XAG> xag, unsigned n_threads)
-    : xag(xag), n_threads(n_threads)
+fastLEC::ret_vals fastLEC::PartitionSAT::check()
 {
-    cnf = xag->construct_cnf_from_this_xag();
-    tp = std::make_unique<ThreadPool>(n_threads, cnf);
-}
 
-fastLEC::ret_vals fastLEC::pSAT::check_xag()
-{
     double start_time = fastLEC::ResMgr::get().get_runtime();
+    ret_vals ret = ret_vals::ret_UNK;
 
-    ret_vals ret = tp->check();
+    for (auto &worker : workers)
+    {
+        if (worker.joinable())
+            worker.join();
+    }
+
+    if (all_tasks[0]->state == SATISFIABLE)
+        ret = ret_vals::ret_SAT;
+    else if (all_tasks[0]->state == UNSATISFIABLE)
+        ret = ret_vals::ret_UNS;
+    else
+        ret = ret_vals::ret_UNK;
 
     if (fastLEC::Param::get().verbose > 0)
     {
         printf("c [pSAT] result = %d [var = %d, clause = %d, lit = %d]"
                "[time = %.2f]\n",
                ret,
-               this->cnf->num_vars,
-               this->cnf->num_clauses(),
-               this->cnf->num_lits(),
+               this->root_cnf->num_vars,
+               this->root_cnf->num_clauses(),
+               this->root_cnf->num_lits(),
                fastLEC::ResMgr::get().get_runtime() - start_time);
         fflush(stdout);
     }
