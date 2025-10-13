@@ -146,8 +146,6 @@ private:
 
     void worker_func(int cpu_id);
 
-    double prt_time_interval = 0.5; // seconds
-    int prt_alltask_interval = 50;  // task number interval
     std::atomic<bool> states_updated;
     std::atomic<bool> all_task_terminated;
     void timeout_monitor_func();
@@ -171,7 +169,8 @@ public:
     std::shared_ptr<kissat> get_solver_by_cpu(int cpu_id);
     unsigned num_tasks() const { return all_tasks.size(); }
 
-    std::string show_current_running_tasks();
+    std::string show_unsolved_tasks();
+    std::string show_pool();
     friend std::ostream &operator<<(std::ostream &os, const PartitionSAT &ps);
 
     ret_vals check();

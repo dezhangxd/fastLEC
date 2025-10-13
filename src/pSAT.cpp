@@ -5,6 +5,8 @@
 #include <cassert>
 #include <shared_mutex>
 
+#define PRT_SOLVING_INFO
+
 // ----------------------------------------------------------------------------
 // related to SQueue
 // ----------------------------------------------------------------------------
@@ -144,7 +146,7 @@ std::ostream &fastLEC::operator<<(std::ostream &os, const Task &t)
 // PartitionSAT class implementation
 // ----------------------------------------------------------------------------
 
-std::string fastLEC::PartitionSAT::show_current_running_tasks()
+std::string fastLEC::PartitionSAT::show_unsolved_tasks()
 {
     std::stringstream ss;
     for (auto &task : all_tasks)
@@ -164,11 +166,43 @@ std::string fastLEC::PartitionSAT::show_current_running_tasks()
     return ss.str();
 }
 
+std::string fastLEC::PartitionSAT::show_pool()
+{
+    unsigned line_ct = Param::get().custom_params.log_items_per_line;
+    std::stringstream ss;
+    ss << "c [P]   " << this->n_threads << " threads, ";
+    ss << "time point:" << fastLEC::ResMgr::get().get_runtime() << "s"
+       << std::endl;
+    ss << "c [P] ";
+    for (unsigned i = 0; i < this->n_threads; i++)
+    {
+        std::stringstream tmp;
+        tmp << std::setw(3) << std::right << i << ": ";
+        auto t = get_task_by_cpu(i);
+        if (t == nullptr)
+        {
+            tmp << std::left << "N/A";
+        }
+        else
+        {
+            tmp << std::left << *t;
+        }
+        ss << std::setw(60) << std::left << tmp.str();
+        if (i % line_ct == line_ct - 1)
+            ss << std::endl << "c [P] ";
+    }
+    {
+        std::lock_guard<std::shared_mutex> lock(_prt_mtx);
+        std::cout << ss.str() << "\n" << std::flush;
+    }
+    return ss.str();
+}
+
 std::ostream &fastLEC::operator<<(std::ostream &os, const PartitionSAT &ps)
 {
-    unsigned line_ct = 3;
+    unsigned line_ct = Param::get().custom_params.log_items_per_line;
     std::stringstream ss;
-    ss << "c [Q] TaskPool: " << ps.all_tasks.size() << " tasks, ";
+    ss << "c [Q]   TaskPool: " << ps.all_tasks.size() << " tasks, ";
     ss << std::endl;
     ss << "c [Q] ";
     for (unsigned i = 0; i < ps.all_tasks.size(); i++)
@@ -334,12 +368,17 @@ void fastLEC::PartitionSAT::worker_func(int cpu_id)
 void fastLEC::PartitionSAT::timeout_monitor_func()
 {
 
+    double prt_time_interval =
+        Param::get().custom_params.prt_cpu_t_interval; // seconds
+    int prt_alltask_interval =
+        Param::get().custom_params.prt_alltask_interval; // task number interval
     double last_prt_time = 0;
     int last_task_num = -prt_alltask_interval - 1;
     while (timeout_thread_running.load())
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
+#ifdef PRT_SOLVING_INFO
         if (fastLEC::ResMgr::get().get_runtime() - last_prt_time >
             prt_time_interval)
         {
@@ -349,9 +388,8 @@ void fastLEC::PartitionSAT::timeout_monitor_func()
                 std::stringstream ss;
                 ss << "c [CPU states] "
                       "+++++++++++++++++++++++++++++++++++++++++\n";
-                ss << "c [CPU states] " << fastLEC::ResMgr::get().get_runtime()
-                   << "s\n";
-                ss << show_current_running_tasks();
+                ss << show_pool() << "\n";
+                // ss << show_unsolved_tasks();
                 ss << "c [CPU states] "
                       "----------------------------------------";
 
@@ -366,8 +404,6 @@ void fastLEC::PartitionSAT::timeout_monitor_func()
                 std::stringstream ss;
                 ss << "c [task states] "
                       "+++++++++++++++++++++++++++++++++++++++++\n";
-                ss << "c [task states] " << this->all_tasks.size()
-                   << " tasks\n";
                 ss << *this;
                 ss << "c [task states] "
                       "+++++++++++++++++++++++++++++++++++++++++\n";
@@ -380,6 +416,7 @@ void fastLEC::PartitionSAT::timeout_monitor_func()
 
             // states_updated.store(false);
         }
+#endif
 
         if (stop.load())
             break;
@@ -530,6 +567,19 @@ fastLEC::ret_vals fastLEC::PartitionSAT::check()
         ret = ret_vals::ret_UNS;
     else
         ret = ret_vals::ret_UNK;
+
+#ifdef PRT_SOLVING_INFO
+    {
+        std::stringstream ss;
+        ss << "c [log] +++++++++++++++++++++++++++++++++++++++++\n";
+        ss << *this;
+        ss << "c [log] -----------------------------------------\n";
+        this->show_pool();
+        ss << "c [log] +++++++++++++++++++++++++++++++++++++++++\n";
+        std::lock_guard<std::shared_mutex> lock(_prt_mtx);
+        std::cout << ss.str();
+    }
+#endif
 
     if (fastLEC::Param::get().verbose > 0)
     {
