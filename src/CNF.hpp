@@ -34,6 +34,13 @@ public:
     int to_xag_lit(int cnf_lit);
     void add_a_variable(int xag_var = -1);
     // ------------------------------------------------------------
+
+    bool build_watches();
+    std::vector<int> unit_clauses;
+    std::vector<int> propagate(const std::vector<int> &cubes);
+    std::vector<std::vector<int>> pos_watches, neg_watches;
+    inline int get_clause_begin(int i);
+    inline int get_clause_end(int i);
 };
 
 } // namespace fastLEC

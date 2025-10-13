@@ -85,3 +85,137 @@ int fastLEC::CNF::to_xag_lit(int cnf_lit)
         return aiger_neg_lit(to_xag_var(-cnf_lit));
     }
 }
+
+inline int fastLEC::CNF::get_clause_begin(int i)
+{
+    return (i == 0) ? 0 : cls_end_pos[i - 1];
+}
+
+inline int fastLEC::CNF::get_clause_end(int i) { return cls_end_pos[i]; }
+
+bool fastLEC::CNF::build_watches()
+{
+    pos_watches.resize((num_vars + 1));
+    neg_watches.resize((num_vars + 1));
+
+    for (int i = 0; i < num_clauses(); i++)
+    {
+        int begin = get_clause_begin(i);
+        int end = get_clause_end(i);
+        if (end - begin == 0)
+        {
+            return false;
+        }
+        else if (end - begin == 1)
+        {
+            unit_clauses.push_back(lits[begin]);
+        }
+        for (int j = begin; j < end; j++)
+        {
+            int lit = lits[j];
+            if (lit > 0)
+                pos_watches[lit].push_back(i);
+            else
+                neg_watches[-lit].push_back(i);
+        }
+    }
+
+    return true;
+}
+
+std::vector<int> fastLEC::CNF::propagate(const std::vector<int> &cubes)
+{
+    std::vector<int> propagated_cubes;
+
+    std::vector<bool> assigned(num_vars + 1, false);
+    std::vector<bool> value(num_vars + 1, false);
+
+    std::function<bool(std::vector<int> &)> perform_bcp =
+        [&](std::vector<int> &q) -> bool
+    {
+        unsigned q_pos = 0;
+        while (q_pos < q.size())
+        {
+            int v = abs(q[q_pos++]);
+
+            auto &ws = value[v] ? neg_watches[v] : pos_watches[v];
+
+            for (int cls_idx : ws)
+            {
+                int cls_begin = get_clause_begin(cls_idx);
+                int cls_end = get_clause_end(cls_idx);
+                int unassigned_lit = -1;
+                int unassigned_lit_cnt = 0;
+                bool has_sat_lit = false;
+                for (int i = cls_begin; i < cls_end; i++)
+                {
+                    int lit = lits[i];
+                    if (assigned[abs(lit)])
+                    {
+                        if (value[abs(lit)] == (lit > 0))
+                        {
+                            has_sat_lit = true;
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        unassigned_lit = lit;
+                        unassigned_lit_cnt++;
+                    }
+                }
+
+                if (has_sat_lit)
+                {
+                    continue;
+                }
+                else if (unassigned_lit_cnt == 0)
+                {
+                    return false;
+                }
+                else if (unassigned_lit_cnt == 1)
+                {
+                    int lit = unassigned_lit;
+                    if (!assigned[abs(lit)])
+                    {
+                        q.emplace_back(lit);
+                        assigned[abs(lit)] = true;
+                        value[abs(lit)] = (lit > 0);
+                    }
+                }
+            }
+        }
+        return true;
+    };
+
+    std::vector<int> q = unit_clauses;
+    for (int lit : cubes)
+        q.emplace_back(lit);
+
+    for (int lit : q)
+    {
+        int v = abs(lit);
+        bool val = (lit > 0);
+        if (assigned[v])
+        {
+            if (value[v] != val)
+            {
+                return std::vector<int>({0});
+            }
+        }
+        else
+        {
+            assigned[abs(lit)] = true;
+            value[abs(lit)] = (lit > 0);
+        }
+    }
+
+    if (perform_bcp(q))
+    {
+        return q;
+    }
+    else
+    {
+        return std::vector<int>({0});
+    }
+}

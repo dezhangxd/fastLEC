@@ -5,6 +5,8 @@
 #include <cassert>
 #include <shared_mutex>
 
+#include <algorithm>
+
 std::shared_mutex _prt_mtx;
 
 // ----------------------------------------------------------------------------
@@ -128,11 +130,11 @@ std::ostream &fastLEC::operator<<(std::ostream &os, const Task &t)
         father_id = "F" + std::to_string(t.father);
 
     os << "+";
-    for (unsigned i = t.cubes.size() - t.new_cube_lit_cnt; i < t.cubes.size();
+    for (unsigned i = t.cube.size() - t.new_cube_lit_cnt; i < t.cube.size();
          i++)
     {
-        os << t.cubes[i];
-        if (i != t.cubes.size() - 1)
+        os << t.cube[i];
+        if (i != t.cube.size() - 1)
             os << ",";
     }
     os << "}";
@@ -156,7 +158,7 @@ void fastLEC::PartitionSAT::show_unsolved_tasks()
             ss << "c [U] " << std::setw(6) << task->father;
             ss << " <f-";
             ss << std::setw(6) << task->id << " : ";
-            for (auto &cube : task->cubes)
+            for (auto &cube : task->cube)
                 ss << std::setw(5) << cube << " ";
             ss << " | ";
             ss << *task;
@@ -176,7 +178,8 @@ void fastLEC::PartitionSAT::show_pool()
     ss << "c [CPU states] ----------- ";
     ss << std::left << std::setw(4) << this->n_threads;
     ss << " threads, time point:";
-    ss << std::left << std::setw(7) << std::fixed << std::setprecision(2) << fastLEC::ResMgr::get().get_runtime(); 
+    ss << std::left << std::setw(7) << std::fixed << std::setprecision(2)
+       << fastLEC::ResMgr::get().get_runtime();
     ss << "s -----------------" << std::endl;
     ss << "c [P] ";
     for (unsigned i = 0; i < this->n_threads; i++)
@@ -209,7 +212,7 @@ std::ostream &fastLEC::operator<<(std::ostream &os, const PartitionSAT &ps)
     unsigned line_ct = Param::get().custom_params.log_items_per_line;
     std::stringstream ss;
     ss << "c [All Task] ++++++++++++++++++++++";
-    ss << std::left << std::setw(6) << std::right << ps.all_tasks.size(); 
+    ss << std::left << std::setw(6) << std::right << ps.all_tasks.size();
     ss << " tasks ++++++++++++++++++++++++++++++" << std::endl;
     ss << "c [Q] ";
     for (unsigned i = 0; i < ps.all_tasks.size(); i++)
@@ -238,8 +241,11 @@ fastLEC::PartitionSAT::PartitionSAT(std::shared_ptr<fastLEC::XAG> xag,
       all_task_terminated(false)
 {
     root_cnf = xag->construct_cnf_from_this_xag();
+    root_cnf->build_watches();
 
     all_task_terminated.store(false);
+
+    scores.resize(root_cnf->num_vars + 1, 1.0);
 
     solvers.resize(n_threads, nullptr);
 
@@ -298,9 +304,14 @@ void fastLEC::PartitionSAT::worker_func(int cpu_id)
             if (free_cnt > 100)
             {
                 free_cnt = 0;
-                std::shared_ptr<Task> task = pick_split_task();
-                if (task)
-                    split_task_and_submit(task);
+
+                if (split_mutex.try_lock())
+                {
+                    std::shared_ptr<Task> task = pick_split_task();
+                    if (task)
+                        split_task_and_submit(task);
+                    split_mutex.unlock();
+                }
             }
             continue;
         }
@@ -335,7 +346,7 @@ void fastLEC::PartitionSAT::worker_func(int cpu_id)
             start_pos = end_pos;
         }
 
-        for (int l : task->cubes)
+        for (int l : task->cube)
         {
             kissat_add(solvers[cpu_id].get(), l);
             kissat_add(solvers[cpu_id].get(), 0);
@@ -440,7 +451,7 @@ fastLEC::PartitionSAT::get_task_by_id(int task_id)
     return all_tasks[task_id];
 }
 
-void fastLEC::PartitionSAT::submit_task(std::shared_ptr<Task> task)
+int fastLEC::PartitionSAT::submit_task(std::shared_ptr<Task> task)
 {
     if (task)
     {
@@ -448,7 +459,9 @@ void fastLEC::PartitionSAT::submit_task(std::shared_ptr<Task> task)
         int task_id = task->id = (int)all_tasks.size();
         all_tasks.push_back(std::move(task));
         q_wait_ids.emplace(std::move(task_id));
+        return task_id;
     }
+    return ID_NONE;
 }
 
 std::shared_ptr<kissat> fastLEC::PartitionSAT::get_solver_by_cpu(int cpu_id)
@@ -505,36 +518,115 @@ void fastLEC::PartitionSAT::terminate_all_tasks()
         t->terminate_info_upd();
 }
 
-std::shared_ptr<fastLEC::Task> fastLEC::PartitionSAT::pick_split_task()
+bool fastLEC::PartitionSAT::split_task_and_submit(
+    std::shared_ptr<fastLEC::Task> father)
 {
-    return get_task_by_id(0);
+    std::vector<int> split_vars = pick_split_vars(father);
+    if (split_vars.size() == 1 && split_vars[0] == 0)
+        return false;
+
+    if (father->is_solved())
+        return false;
+
+    std::vector<std::shared_ptr<fastLEC::Task>> sons;
+    std::vector<int> sons_ids;
+    for (unsigned cnt = 0; cnt < (1ul << split_vars.size()); cnt++)
+    {
+        std::shared_ptr<fastLEC::Task> new_task =
+            std::make_shared<fastLEC::Task>();
+
+        new_task->father = father->id;
+        new_task->level = father->level + 1;
+        new_task->cube = father->cube;
+        for (unsigned i = 0; i < split_vars.size(); i++)
+        {
+            if (cnt & (1 << i))
+                new_task->cube.push_back(split_vars[i]);
+            else
+                new_task->cube.push_back(-split_vars[i]);
+        }
+        new_task->new_cube_lit_cnt = split_vars.size();
+
+        sons.push_back(new_task);
+        // Note: new_task->id will be set in submit_task, so we can't use it
+        // here sons_ids will be populated after submit_task calls
+
+        if (father->is_solved())
+            break;
+    }
+
+    if (!father->is_solved())
+    {
+        // Submit all tasks and collect their IDs
+        for (unsigned i = 0; i < sons.size(); i++)
+        {
+            int task_id = submit_task(std::move(sons[i]));
+            // The task ID is set in submit_task, so we need to get it from the
+            // last added task
+            sons_ids.push_back(task_id);
+        }
+        father->sons.push_back(sons_ids);
+        return true;
+    }
+    else
+        return false;
 }
 
-bool fastLEC::PartitionSAT::split_task_and_submit(
-    std::shared_ptr<fastLEC::Task> task)
+std::vector<int>
+fastLEC::PartitionSAT::pick_split_vars(std::shared_ptr<fastLEC::Task> father)
 {
-    int split_v =
-        (fastLEC::ResMgr::get().random(0, root_cnf->num_vars) + 1) - 1;
-    std::shared_ptr<fastLEC::Task> new_task1 =
-        std::make_shared<fastLEC::Task>();
-    std::shared_ptr<fastLEC::Task> new_task2 =
-        std::make_shared<fastLEC::Task>();
+    std::vector<int> propagated_lits = father->cube;
 
-    new_task1->father = task->id;
-    task->sons.push_back({(int)num_tasks(), (int)num_tasks() + 1});
-    new_task1->level = task->level + 1;
-    new_task1->cubes = task->cubes;
-    new_task1->cubes.push_back(split_v);
-    new_task1->new_cube_lit_cnt = 1;
-    submit_task(std::move(new_task1));
+    propagated_lits = root_cnf->propagate(propagated_lits);
 
-    new_task2->father = task->id;
-    new_task2->level = task->level + 1;
-    new_task2->cubes = task->cubes;
-    new_task2->cubes.push_back(-split_v);
-    new_task2->new_cube_lit_cnt = 1;
-    submit_task(std::move(new_task2));
-    return true;
+    if (propagated_lits.size() == 1 && propagated_lits[0] == 0)
+        return propagated_lits; // false
+
+    std::vector<bool> forbidden_vars(root_cnf->num_vars + 1, false);
+    for (int l : propagated_lits)
+        forbidden_vars[abs(l)] = true;
+
+    std::vector<int> candidates_vars;
+
+    for (int i = 1; i <= root_cnf->num_vars; i++)
+    {
+        if (scores[i] <= 0.0)
+            continue;
+
+        if (!forbidden_vars[i])
+            candidates_vars.emplace_back(i);
+    }
+
+    std::sort(candidates_vars.begin(),
+              candidates_vars.end(),
+              [&](int x, int y)
+              {
+                  return scores[x] > scores[y];
+              });
+
+    int num_swaps = candidates_vars.size() * 0.1;
+    for (int i = 0; i < num_swaps; ++i)
+    {
+        int pos = fastLEC::ResMgr::get().random_uint64() %
+            (candidates_vars.size() - 1);
+        std::swap(candidates_vars[pos], candidates_vars[pos + 1]);
+    }
+
+    unsigned pick_var_num = 1;
+
+    std::vector<int> pick_vars;
+    for (unsigned i = 0; pick_vars.size() < (unsigned)pick_var_num &&
+         i < candidates_vars.size();
+         i++)
+    {
+        int pick_aig_v = candidates_vars[i];
+        pick_vars.push_back(pick_aig_v);
+    }
+
+    if (pick_vars.size() == 0)
+        return std::vector<int>({0});
+
+    return pick_vars;
 }
 
 fastLEC::ret_vals fastLEC::PartitionSAT::check()
@@ -557,8 +649,7 @@ fastLEC::ret_vals fastLEC::PartitionSAT::check()
         ret = ret_vals::ret_UNK;
 
 #ifdef PRT_SOLVING_INFO
-    {   
-        this->show_pool();
+    {
         std::cout << *this;
     }
 #endif

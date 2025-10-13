@@ -620,6 +620,7 @@ set(SOURCES
     src/simu_seq.cpp
     src/simu_para.cpp
     src/sweeper.cpp
+    src/pSAT_heuristics.cpp
 )
 
 # CUDA source files

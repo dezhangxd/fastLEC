@@ -223,17 +223,9 @@ TASK_0(fastLEC::ret_vals, _main)
     // - 1<<31 cache: 72 GB
     // - 1<<32 cache: 144 GB
 
-    // 使用 sylvan_set_limits 来设置 50G 内存上限
-    // 参数：内存上限(字节), 表比例(0=相等), 初始比例(4=1/16)
-    try {
-        sylvan_set_limits(50ULL * 1024 * 1024 * 1024, 0, 4);
-        sylvan_init_package();
-    } catch (const std::system_error& e) {
-        printf("c [Sylvan] 内存分配失败，尝试使用较小的内存配置: %s\n", e.what());
-        // 回退到较小的内存配置
-        sylvan_set_limits(10ULL * 1024 * 1024 * 1024, 0, 4); // 10G
-        sylvan_init_package();
-    }
+    // sylvan_set_sizes(1LL<<22, 1LL<<26, 1LL<<22, 1LL<<26); //default
+    sylvan_set_sizes(1LL << 22, 1LL << 30, 1LL << 22, 1LL << 30); // 50G
+    sylvan_init_package();
 
     // Initialize the BDD module with granularity 1 (cache every operation)
     // A higher granularity (e.g. 6) often results in better performance in

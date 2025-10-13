@@ -91,9 +91,10 @@ public:
     // states state;
     std::atomic<task_states> state;
 
-    int id, cpu;               // task id, cpu id
-    std::vector<int> cubes;    // task cubes
-    unsigned new_cube_lit_cnt; // new cube lit count
+    int id, cpu;                      // task id, cpu id
+    std::vector<int> cube;            // task cubes
+    std::vector<int> propagated_lits; // propagated lits
+    unsigned new_cube_lit_cnt;        // new cube lit count
 
     double create_time, // create time
         start_time,     // start solving time
@@ -149,7 +150,14 @@ private:
 
     std::atomic<bool> states_updated;
     std::atomic<bool> all_task_terminated;
+
+    std::mutex split_mutex; //
+
     void timeout_monitor_func();
+
+    // ------------------------------------------------------------
+    std::vector<double> scores;
+    // ------------------------------------------------------------
 
 public:
     PartitionSAT(std::shared_ptr<fastLEC::XAG> xag, unsigned n_threads);
@@ -158,14 +166,16 @@ public:
     std::shared_ptr<Task> get_task_by_cpu(int cpu_id);
     std::shared_ptr<Task> get_task_by_id(int task_id);
 
-    void submit_task(std::shared_ptr<Task> task);
+    int submit_task(std::shared_ptr<Task> task);
 
     void terminate_task_by_id(int task_id);
     void terminate_task_by_cpu(int cpu_id);
     void terminate_all_tasks();
 
     std::shared_ptr<fastLEC::Task> pick_split_task();
-    bool split_task_and_submit(std::shared_ptr<fastLEC::Task> xag);
+    std::vector<int> pick_split_vars(std::shared_ptr<fastLEC::Task> father);
+    bool compute_scores();
+    bool split_task_and_submit(std::shared_ptr<fastLEC::Task> father);
 
     std::shared_ptr<kissat> get_solver_by_cpu(int cpu_id);
     unsigned num_tasks() const { return all_tasks.size(); }
@@ -178,6 +188,5 @@ public:
 };
 
 std::ostream &operator<<(std::ostream &os, const PartitionSAT &ps);
-
 
 } // namespace fastLEC

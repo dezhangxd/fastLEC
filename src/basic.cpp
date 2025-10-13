@@ -49,6 +49,12 @@ template <typename T> T ResMgr::random(T min, T max)
     }
 }
 
+double ResMgr::random_double(double min, double max)
+{
+    std::uniform_real_distribution<double> dist(min, max);
+    return dist(_rng);
+}
+
 bv_unit_t ResMgr::random_uint64()
 {
     std::uniform_int_distribution<bv_unit_t> dist(0, UINT64_MAX);

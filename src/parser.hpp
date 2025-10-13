@@ -52,6 +52,12 @@ namespace fastLEC
     USER_PARAM(prt_cpu_t_interval, double, 1.0, "Time interval for printing")  \
     USER_PARAM(                                                                \
         prt_alltask_interval, int, 50, "Task number interval for printing")    \
+    USER_PARAM(gt_max_split, int, 1, "Max split times for a task")             \
+    USER_PARAM(                                                                \
+        gt_level_coefficient, double, 1.5, "Level coefficient for score")      \
+    USER_PARAM(gt_split_decay, double, 0.75, "Split decay for score")          \
+    USER_PARAM(gt_sons_decay, double, 0.95, "Sons decay for score")
+
 // Custom parameters structure (auto-generated)
 struct CustomParams
 {
