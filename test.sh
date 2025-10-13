@@ -12,7 +12,7 @@ BUILD_DIR="build"
 # command="-m pES -c 4 -v 2 -t 20 -p use_pes_pbit 0"
 # command="-m SAT_sweeping -c 4 -v 2 -t 100 -p log_sub_cnfs 1 -p log_dir ./logs/"
 # command="-m pBDD -c 32 -t 50"
-command="-m pSAT_sweeping -c 4 -v 2 -t 30"
+command="-m pSAT_sweeping -c 8 -v 2 -t 50"
 # command="-m pBDD -c 4 -v 2 -t 5 "
 
 # rm -rf *.aig

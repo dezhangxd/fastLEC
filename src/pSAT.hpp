@@ -118,6 +118,7 @@ public:
 
     friend std::ostream &operator<<(std::ostream &os, const Task &t);
 };
+std::ostream &operator<<(std::ostream &os, const Task &t);
 
 // a thread pool based SAT solver
 class PartitionSAT
@@ -169,26 +170,14 @@ public:
     std::shared_ptr<kissat> get_solver_by_cpu(int cpu_id);
     unsigned num_tasks() const { return all_tasks.size(); }
 
-    std::string show_unsolved_tasks();
-    std::string show_pool();
+    void show_unsolved_tasks();
+    void show_pool();
     friend std::ostream &operator<<(std::ostream &os, const PartitionSAT &ps);
 
     ret_vals check();
 };
 
-class pSAT
-{
-    std::shared_ptr<fastLEC::XAG> xag;
-    std::shared_ptr<fastLEC::CNF> cnf;
+std::ostream &operator<<(std::ostream &os, const PartitionSAT &ps);
 
-    unsigned n_threads;
-    std::unique_ptr<PartitionSAT> tp;
-
-public:
-    pSAT(std::shared_ptr<fastLEC::XAG> xag, unsigned n_threads);
-    ~pSAT() = default;
-
-    fastLEC::ret_vals check();
-};
 
 } // namespace fastLEC

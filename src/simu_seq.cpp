@@ -31,7 +31,7 @@ void bvec_reset_s(bvec_ts *vec) { *vec = 0u; }
 void fastLEC::ISimulator::prt_bvec(bvec_t *vec)
 {
     for (bvec_t i = 0; i < BVEC_SIZE; i++)
-        printf("%" PRIu64, (*vec >> i) & 1ull);
+        std::cout << ((*vec >> i) & 1ull);
 
     printf("\n");
 }
