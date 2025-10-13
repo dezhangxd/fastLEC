@@ -89,7 +89,7 @@ void fastLEC::Task::terminate_info_upd()
     task_states s = state.load(std::memory_order_relaxed);
     while (s == WAITING || s == ADDING || s == RUNNING)
     {
-        if (state.compare_exchange_weak(s, UNKNOW, std::memory_order_relaxed))
+        if (state.compare_exchange_weak(s, UNKNOWN, std::memory_order_relaxed))
             break;
     }
     if (stop_time == 0.0)
@@ -164,6 +164,29 @@ void fastLEC::PartitionSAT::show_unsolved_tasks()
             ss << *task;
             ss << std::endl;
         }
+    }
+    {
+        std::lock_guard<std::shared_mutex> lock(_prt_mtx);
+        std::cout << ss.str() << std::flush;
+    }
+}
+
+void fastLEC::PartitionSAT::show_detailed_tasks()
+{
+    std::stringstream ss;
+    ss << "c [All Task] ++++++++++++++++++++++";
+    ss << std::left << std::setw(6) << std::right << this->all_tasks.size();
+    ss << " tasks ++++++++++++++++++++++++++++++" << std::endl;
+    for (auto &task : all_tasks)
+    {
+        ss << "c [A] " << std::setw(6) << task->father;
+        ss << " <f-";
+        ss << std::setw(6) << task->id << " : ";
+        for (auto &cube : task->cube)
+            ss << std::setw(5) << cube << " ";
+        ss << " | ";
+        ss << *task;
+        ss << std::endl;
     }
     {
         std::lock_guard<std::shared_mutex> lock(_prt_mtx);
@@ -295,15 +318,14 @@ fastLEC::ret_vals fastLEC::PartitionSAT::prop_task_status()
     int tid;
     while (q_prop_ids.try_pop(tid))
     {
-        printf("c [pSAT] prop_task_status: tid = %d\n", tid);
-        fflush(stdout);
         std::shared_ptr<Task> t = get_task_by_id(tid);
         if (t->is_sat())
         {
 #ifdef PRT_SOLVING_INFO
             {
                 std::lock_guard<std::shared_mutex> lock(_prt_mtx);
-                std::cout << "c       [>] T" << t->id << " -> SAT" << std::endl;
+                std::cout << "c         [>] T" << t->id << " -> SAT"
+                          << std::endl;
                 std::cout << std::flush;
             }
 #endif
@@ -317,7 +339,7 @@ fastLEC::ret_vals fastLEC::PartitionSAT::prop_task_status()
 #ifdef PRT_SOLVING_INFO
                 {
                     std::lock_guard<std::shared_mutex> lock(_prt_mtx);
-                    std::cout << "c       [>] T" << t->id << " -> UNSAT"
+                    std::cout << "c         [>] T" << t->id << " -> UNSAT"
                               << std::endl;
                     std::cout << std::flush;
                 }
@@ -369,7 +391,7 @@ fastLEC::ret_vals fastLEC::PartitionSAT::prop_task_status()
             if (propagated.size() > 0)
             {
                 std::stringstream ss;
-                ss << "c       [>] T" << t->id << " -> ";
+                ss << "c         [>] T" << t->id << " -> ";
                 for (auto &i : propagated)
                     ss << "T" << i << " ";
                 {
@@ -457,7 +479,7 @@ void fastLEC::PartitionSAT::worker_func(int cpu_id)
 #ifdef PRT_SOLVING_INFO
             {
                 std::lock_guard<std::shared_mutex> lock(_prt_mtx);
-                std::cout << "c   [+] T" << task->id << " on cpu" << cpu_id
+                std::cout << "c  [+] T" << task->id << " on cpu" << cpu_id
                           << std::endl;
                 std::cout << std::flush;
             }
@@ -467,7 +489,8 @@ void fastLEC::PartitionSAT::worker_func(int cpu_id)
 
             if (result == 0)
             {
-                task->set_state(UNKNOW);
+                if (!task->is_solved())
+                    task->set_state(UNKNOWN);
             }
             else
             {
@@ -477,22 +500,17 @@ void fastLEC::PartitionSAT::worker_func(int cpu_id)
                     task->set_state(SATISFIABLE);
                 else if (result == 20)
                     task->set_state(UNSATISFIABLE);
-                else
-                    task->set_state(UNKNOW);
-
-                fastLEC::ret_vals ret = ret_vals::ret_UNK;
-                ret = prop_task_status();
-                if (ret == ret_vals::ret_SAT || ret == ret_vals::ret_UNS)
-                    break;
-
-                if (task->id == ID_ROOT)
-                    terminate_all_tasks();
+                else if (!task->is_solved())
+                    task->set_state(UNKNOWN);
             }
+
+            if (task->id == ID_ROOT && task->is_solved())
+                terminate_all_tasks();
 
 #ifdef PRT_SOLVING_INFO
 
             std::stringstream ss;
-            ss << "c       [-] T" << task->id << ", ";
+            ss << "c      [-] T" << task->id << ", ";
             if (task->is_sat())
                 ss << "sat";
             else if (task->is_unsat())
@@ -513,6 +531,11 @@ void fastLEC::PartitionSAT::worker_func(int cpu_id)
             std::lock_guard<std::mutex> lock(*mutexes[cpu_id]);
             cpu_task_ids[cpu_id] = ID_NONE;
         }
+
+        fastLEC::ret_vals ret = ret_vals::ret_UNK;
+        ret = prop_task_status();
+        if (ret == ret_vals::ret_SAT || ret == ret_vals::ret_UNS)
+            break;
     }
 }
 
@@ -701,7 +724,7 @@ bool fastLEC::PartitionSAT::split_task_and_submit(
         father->sons.push_back(sons_ids);
 #ifdef PRT_SOLVING_INFO
         std::stringstream ss;
-        ss << "c [;] T" << father->id << " -s> ";
+        ss << "c    [;] T" << father->id << " -s> ";
         for (unsigned i = 0; i < split_vars.size(); i++)
             ss << "v" << split_vars[i] << " ";
         ss << "{";
@@ -804,7 +827,8 @@ fastLEC::ret_vals fastLEC::PartitionSAT::check()
 
 #ifdef PRT_SOLVING_INFO
     {
-        std::cout << *this;
+        // std::cout << *this;
+        show_detailed_tasks();
     }
 #endif
 

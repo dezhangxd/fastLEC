@@ -78,7 +78,7 @@ enum task_states
     RUNNING,       // start SAT solving
     SATISFIABLE,   // get a SAT result
     UNSATISFIABLE, // get a UNSAT result
-    UNKNOW,        // be cutted
+    UNKNOWN,       // be cutted
 };
 // ----------------------------------------------------------------------------
 
@@ -183,6 +183,7 @@ public:
     unsigned num_tasks() const { return all_tasks.size(); }
 
     void show_unsolved_tasks();
+    void show_detailed_tasks();
     void show_pool();
     friend std::ostream &operator<<(std::ostream &os, const PartitionSAT &ps);
 

@@ -4,6 +4,7 @@
 
 std::shared_ptr<fastLEC::Task> fastLEC::PartitionSAT::pick_split_task()
 {
+    compute_scores();
     unsigned max_split = fastLEC::Param::get().custom_params.gt_max_split;
     double max_rt = -1;
     std::shared_ptr<Task> target_task = nullptr;
@@ -57,8 +58,10 @@ bool fastLEC::PartitionSAT::compute_scores()
     for (int i = 1; i <= root_cnf->num_vars; i++)
     {
         scores[i] = 1.0 + fastLEC::ResMgr::get().random_double(0.0, 1.0);
-        printf("score[%d] = %f\n", i, scores[i]);
-        fflush(stdout);
+        scores[227] += 1000.0;
+        scores[243] += 1000.0;
+        // printf("score[%d] = %f\n", i, scores[i]);
+        // fflush(stdout);
     }
     return true;
 }
