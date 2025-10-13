@@ -49,7 +49,7 @@ namespace fastLEC
     USER_PARAM(log_sub_cnfs, bool, false, "Log the CNFs of sub-graphs")        \
     USER_PARAM(log_dir, std::string, "./", "Log directory")                    \
     USER_PARAM(log_items_per_line, int, 2, "Number of items per line in log")  \
-    USER_PARAM(prt_cpu_t_interval, double, 1.0, "Time interval for printing")  \
+    USER_PARAM(prt_cpu_t_interval, double, 50.0, "Time interval for printing") \
     USER_PARAM(                                                                \
         prt_alltask_interval, int, 50, "Task number interval for printing")    \
     USER_PARAM(gt_max_split, int, 1, "Max split times for a task")             \

@@ -114,6 +114,8 @@ public:
     {
         return state == SATISFIABLE || state == UNSATISFIABLE;
     }
+    bool is_sat() const { return state == SATISFIABLE; }
+    bool is_unsat() const { return state == UNSATISFIABLE; }
 
     void set_state(task_states s) { state.store(s, std::memory_order_relaxed); }
 
@@ -183,6 +185,8 @@ public:
     void show_unsolved_tasks();
     void show_pool();
     friend std::ostream &operator<<(std::ostream &os, const PartitionSAT &ps);
+
+    ret_vals prop_task_status();
 
     ret_vals check();
 };

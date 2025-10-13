@@ -290,6 +290,105 @@ fastLEC::PartitionSAT::~PartitionSAT()
     }
 }
 
+fastLEC::ret_vals fastLEC::PartitionSAT::prop_task_status()
+{
+    int tid;
+    while (q_prop_ids.try_pop(tid))
+    {
+        printf("c [pSAT] prop_task_status: tid = %d\n", tid);
+        fflush(stdout);
+        std::shared_ptr<Task> t = get_task_by_id(tid);
+        if (t->is_sat())
+        {
+#ifdef PRT_SOLVING_INFO
+            {
+                std::lock_guard<std::shared_mutex> lock(_prt_mtx);
+                std::cout << "c       [>] T" << t->id << " -> SAT" << std::endl;
+                std::cout << std::flush;
+            }
+#endif
+            terminate_all_tasks();
+            return ret_vals::ret_SAT;
+        }
+        else if (t->is_unsat())
+        {
+            if (t->is_root())
+            {
+#ifdef PRT_SOLVING_INFO
+                {
+                    std::lock_guard<std::shared_mutex> lock(_prt_mtx);
+                    std::cout << "c       [>] T" << t->id << " -> UNSAT"
+                              << std::endl;
+                    std::cout << std::flush;
+                }
+#endif
+                terminate_all_tasks();
+                return ret_vals::ret_UNS;
+            }
+
+            std::vector<int> propagated;
+
+            // propagate father;
+            if (t->father != ID_NONE && !all_tasks[t->father]->is_solved())
+            {
+                for (auto brothers : all_tasks[t->father]->sons)
+                {
+                    bool all_brothers_unsat = true;
+                    for (auto &bro : brothers)
+                    {
+                        if (!all_tasks[bro]->is_unsat())
+                        {
+                            all_brothers_unsat = false;
+                            break;
+                        }
+                    }
+                    if (all_brothers_unsat)
+                    {
+                        propagated.emplace_back(t->father);
+                        all_tasks[t->father]->set_state(
+                            task_states::UNSATISFIABLE);
+                        terminate_task_by_id(t->father);
+                    }
+                }
+            }
+
+            // propagate sons;
+            for (auto &brothers : t->sons)
+            {
+                for (auto &son : brothers)
+                {
+                    if (!all_tasks[son]->is_solved())
+                    {
+                        propagated.emplace_back(son);
+                        all_tasks[son]->set_state(task_states::UNSATISFIABLE);
+                        terminate_task_by_id(son);
+                    }
+                }
+            }
+#ifdef PRT_SOLVING_INFO
+            if (propagated.size() > 0)
+            {
+                std::stringstream ss;
+                ss << "c       [>] T" << t->id << " -> ";
+                for (auto &i : propagated)
+                    ss << "T" << i << " ";
+                {
+                    std::lock_guard<std::shared_mutex> lock(_prt_mtx);
+                    std::cout << ss.str() << std::endl;
+                    std::cout << std::flush;
+                }
+            }
+#endif
+        }
+        // else if (t->paused.load())
+        // {
+        //     results.emplace(std::move(t));
+        // }
+    }
+
+    return ret_vals::ret_UNK;
+}
+
 void fastLEC::PartitionSAT::worker_func(int cpu_id)
 {
     int free_cnt = 0;
@@ -355,15 +454,25 @@ void fastLEC::PartitionSAT::worker_func(int cpu_id)
         if (!stop.load())
         {
             task->set_state(RUNNING);
+#ifdef PRT_SOLVING_INFO
+            {
+                std::lock_guard<std::shared_mutex> lock(_prt_mtx);
+                std::cout << "c   [+] T" << task->id << " on cpu" << cpu_id
+                          << std::endl;
+                std::cout << std::flush;
+            }
+#endif
+
             result = kissat_solve(solvers[cpu_id].get());
 
             if (result == 0)
             {
-                q_prop_ids.emplace(std::move(id));
                 task->set_state(UNKNOW);
             }
             else
             {
+                q_prop_ids.emplace(std::move(id));
+
                 if (result == 10)
                     task->set_state(SATISFIABLE);
                 else if (result == 20)
@@ -371,9 +480,33 @@ void fastLEC::PartitionSAT::worker_func(int cpu_id)
                 else
                     task->set_state(UNKNOW);
 
+                fastLEC::ret_vals ret = ret_vals::ret_UNK;
+                ret = prop_task_status();
+                if (ret == ret_vals::ret_SAT || ret == ret_vals::ret_UNS)
+                    break;
+
                 if (task->id == ID_ROOT)
                     terminate_all_tasks();
             }
+
+#ifdef PRT_SOLVING_INFO
+
+            std::stringstream ss;
+            ss << "c       [-] T" << task->id << ", ";
+            if (task->is_sat())
+                ss << "sat";
+            else if (task->is_unsat())
+                ss << "unsat";
+            else
+                ss << "unknown";
+            ss << std::endl;
+            std::cout << std::flush;
+
+            {
+                std::lock_guard<std::shared_mutex> lock(_prt_mtx);
+                std::cout << ss.str();
+            }
+#endif
         }
         task->terminate_info_upd();
         {
@@ -566,6 +699,27 @@ bool fastLEC::PartitionSAT::split_task_and_submit(
             sons_ids.push_back(task_id);
         }
         father->sons.push_back(sons_ids);
+#ifdef PRT_SOLVING_INFO
+        std::stringstream ss;
+        ss << "c [;] T" << father->id << " -s> ";
+        for (unsigned i = 0; i < split_vars.size(); i++)
+            ss << "v" << split_vars[i] << " ";
+        ss << "{";
+        for (unsigned i = 0; i < sons_ids.size(); i++)
+        {
+            ss << "T" << sons_ids[i];
+            if (i < sons_ids.size() - 1)
+                ss << " ";
+        }
+        ss << "}";
+
+        {
+            std::lock_guard<std::shared_mutex> lock(_prt_mtx);
+            std::cout << ss.str() << std::endl;
+            std::cout << std::flush;
+        }
+#endif
+
         return true;
     }
     else
