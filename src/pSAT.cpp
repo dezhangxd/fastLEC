@@ -9,144 +9,7 @@
 
 std::shared_mutex _prt_mtx;
 
-// ----------------------------------------------------------------------------
-// related to SQueue
-// ----------------------------------------------------------------------------
-
 #define PRT_SOLVING_INFO
-
-template <typename T> bool fastLEC::SQueue<T>::empty() const
-{
-    std::lock_guard<std::mutex> lock(_mtx);
-    return q.empty();
-}
-
-template <typename T> unsigned fastLEC::SQueue<T>::size() const
-{
-    std::lock_guard<std::mutex> lock(_mtx);
-    return q.size();
-}
-
-template <typename T> void fastLEC::SQueue<T>::emplace(T &&item)
-{
-    {
-        std::lock_guard<std::mutex> lock(_mtx);
-        q.emplace(std::move(item));
-    }
-    _cv.notify_one();
-}
-
-template <typename T> T fastLEC::SQueue<T>::pop()
-{
-    std::unique_lock<std::mutex> lock(_mtx);
-    _cv.wait(lock,
-             [this]()
-             {
-                 return !q.empty();
-             });
-
-    T item = std::move(q.front());
-    q.pop();
-    return item;
-}
-
-template <typename T> bool fastLEC::SQueue<T>::try_pop(T &item)
-{
-    std::lock_guard<std::mutex> lock(_mtx);
-    if (q.empty())
-        return false;
-
-    item = std::move(q.front());
-    q.pop();
-    return true;
-}
-
-// ----------------------------------------------------------------------------
-// Task class implementation
-// ----------------------------------------------------------------------------
-
-fastLEC::Task::Task()
-    : state(WAITING), id(ID_NONE), cpu(CPU_NONE), new_cube_lit_cnt(0),
-      father(ID_NONE), level(0)
-{
-    create_time = fastLEC::ResMgr::get().get_runtime();
-    start_time = 0.0;
-    stop_time = 0.0;
-}
-
-double fastLEC::Task::runtime() const
-{
-    if (stop_time > 0.0)
-        return stop_time - start_time;
-    else if (start_time > 0.0)
-        return fastLEC::ResMgr::get().get_runtime() - start_time;
-    else
-        return -1.0;
-}
-
-void fastLEC::Task::terminate_info_upd()
-{
-    task_states s = state.load(std::memory_order_relaxed);
-    while (s == WAITING || s == ADDING || s == RUNNING)
-    {
-        if (state.compare_exchange_weak(s, UNKNOWN, std::memory_order_relaxed))
-            break;
-    }
-    if (stop_time == 0.0)
-        stop_time = fastLEC::ResMgr::get().get_runtime();
-}
-
-std::ostream &fastLEC::operator<<(std::ostream &os, const Task &t)
-{
-    os << "T[";
-    if (t.state == task_states::WAITING)
-        os << "W";
-    else if (t.state == task_states::ADDING)
-        os << "A";
-    else if (t.state == task_states::RUNNING)
-        os << "R";
-    else if (t.state == task_states::SATISFIABLE)
-        os << "S";
-    else if (t.state == task_states::UNSATISFIABLE)
-        os << "U";
-    else
-        os << "?";
-
-    os << ",";
-    os << std::left << t.id;
-    os << ",C";
-    os << std::left << t.cpu;
-    os << ",L";
-    os << std::left << t.level;
-    os << "]";
-
-    os << "{";
-    std::string father_id = "";
-    if (t.is_root())
-        father_id = "N/A ";
-    else if (t.father == ID_ROOT)
-        father_id = "ROOT";
-    else
-        father_id = "F" + std::to_string(t.father);
-
-    os << "+";
-    for (unsigned i = t.cube.size() - t.new_cube_lit_cnt; i < t.cube.size();
-         i++)
-    {
-        os << t.cube[i];
-        if (i != t.cube.size() - 1)
-            os << ",";
-    }
-    os << "}";
-
-    os << "," << std::right << std::setw(7) << std::fixed
-       << std::setprecision(2) << t.runtime() << "s";
-    return os;
-}
-
-// ----------------------------------------------------------------------------
-// PartitionSAT class implementation
-// ----------------------------------------------------------------------------
 
 void fastLEC::PartitionSAT::show_unsolved_tasks()
 {
@@ -260,7 +123,7 @@ std::ostream &fastLEC::operator<<(std::ostream &os, const PartitionSAT &ps)
 fastLEC::PartitionSAT::PartitionSAT(std::shared_ptr<fastLEC::XAG> xag,
                                     unsigned n_threads)
     : xag(xag), n_threads(n_threads), stop(false),
-      timeout_thread_running(false), states_updated(false),
+      timeout_thread_running(false), states_updated(true),
       all_task_terminated(false)
 {
     root_cnf = xag->construct_cnf_from_this_xag();
@@ -514,6 +377,7 @@ void fastLEC::PartitionSAT::worker_func(int cpu_id)
 #ifdef PRT_SOLVING_INFO
 
             std::stringstream ss;
+            states_updated.store(true);
             ss << "c      [-] T" << task->id << ", ";
             if (task->is_sat())
                 ss << "sat";
@@ -558,7 +422,8 @@ void fastLEC::PartitionSAT::timeout_monitor_func()
 
 #ifdef PRT_SOLVING_INFO
         if (fastLEC::ResMgr::get().get_runtime() - last_prt_time >
-            prt_time_interval)
+                prt_time_interval &&
+            states_updated.load())
         {
             last_prt_time = fastLEC::ResMgr::get().get_runtime();
             {
@@ -573,7 +438,7 @@ void fastLEC::PartitionSAT::timeout_monitor_func()
                 std::cout << *this;
             }
 
-            // states_updated.store(false);
+            states_updated.store(false);
         }
 #endif
 
@@ -609,6 +474,40 @@ fastLEC::PartitionSAT::get_task_by_id(int task_id)
     if (task_id < 0 || task_id > (int)all_tasks.size())
         return nullptr;
     return all_tasks[task_id];
+}
+
+bool fastLEC::PartitionSAT::propagate_task(
+    std::shared_ptr<Task> task,
+    std::vector<bool> &forbidden_vars,
+    std::vector<int> &new_decision_lits,
+    std::vector<int> &new_propagated_lits)
+{
+    std::vector<bool> assign, val;
+
+    if (!task->is_propagated)
+    {
+        bool res = root_cnf->perform_bcp(assign,
+                                         val,
+                                         task->cube,
+                                         task->propagated_lits,
+                                         {},
+                                         new_propagated_lits);
+        task->is_propagated = true;
+        if (res == false)
+            return false;
+    }
+
+    bool res = root_cnf->perform_bcp(forbidden_vars,
+                                     val,
+                                     task->cube,
+                                     task->propagated_lits,
+                                     new_decision_lits,
+                                     new_propagated_lits);
+
+    if (res == false)
+        return false;
+
+    return true;
 }
 
 int fastLEC::PartitionSAT::submit_task(std::shared_ptr<Task> task)
@@ -758,14 +657,12 @@ fastLEC::PartitionSAT::pick_split_vars(std::shared_ptr<fastLEC::Task> father)
 {
     std::vector<int> propagated_lits = father->cube;
 
-    propagated_lits = root_cnf->propagate(propagated_lits);
-
-    if (propagated_lits.size() == 1 && propagated_lits[0] == 0)
-        return propagated_lits; // false
-
     std::vector<bool> forbidden_vars(root_cnf->num_vars + 1, false);
-    for (int l : propagated_lits)
-        forbidden_vars[abs(l)] = true;
+    std::vector<int> nd, np;
+    bool res = propagate_task(father, forbidden_vars, nd, np);
+
+    if (!res)
+        return std::vector<int>({0});
 
     std::vector<int> candidates_vars;
 

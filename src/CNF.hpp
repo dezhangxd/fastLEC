@@ -37,7 +37,18 @@ public:
 
     bool build_watches();
     std::vector<int> unit_clauses;
-    std::vector<int> propagate(const std::vector<int> &cubes);
+
+    // return false if UNSAT;
+    // only prop new_decision_lits, and return new_propagated_lits
+    // old_trail = unit_clauses + base_decision_lits + base_propagated_lits,
+    // and propagated from new_decision_lits
+    bool perform_bcp(std::vector<bool> &assigned,
+                     std::vector<bool> &value,
+                     const std::vector<int> &base_decision_lits,
+                     const std::vector<int> &base_propagated_lits,
+                     const std::vector<int> &new_decision_lits,
+                     std::vector<int> &new_propagated_lits);
+
     std::vector<std::vector<int>> pos_watches, neg_watches;
     inline int get_clause_begin(int i);
     inline int get_clause_end(int i);

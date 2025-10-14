@@ -1,6 +1,8 @@
 #include "CNF.hpp"
+#include <functional>
 #include <iomanip>
 #include <fstream>
+#include <vector>
 #include "AIG.hpp"
 
 using namespace fastLEC;
@@ -123,99 +125,107 @@ bool fastLEC::CNF::build_watches()
     return true;
 }
 
-std::vector<int> fastLEC::CNF::propagate(const std::vector<int> &cubes)
+bool fastLEC::CNF::perform_bcp(
+    std::vector<bool> &assigned,
+    std::vector<bool> &value,
+    const std::vector<int> &base_decision_lits,
+    const std::vector<int> &base_propagated_lits,
+    const std::vector<int> &new_decision_lits, // also a flag for re-propagate
+    std::vector<int> &new_propagated_lits)
 {
-    std::vector<int> propagated_cubes;
+    assigned.resize(num_vars + 1, false);
+    value.resize(num_vars + 1, false);
 
-    std::vector<bool> assigned(num_vars + 1, false);
-    std::vector<bool> value(num_vars + 1, false);
+    std::vector<int> q;
 
-    std::function<bool(std::vector<int> &)> perform_bcp =
-        [&](std::vector<int> &q) -> bool
-    {
-        unsigned q_pos = 0;
-        while (q_pos < q.size())
-        {
-            int v = abs(q[q_pos++]);
-
-            auto &ws = value[v] ? neg_watches[v] : pos_watches[v];
-
-            for (int cls_idx : ws)
-            {
-                int cls_begin = get_clause_begin(cls_idx);
-                int cls_end = get_clause_end(cls_idx);
-                int unassigned_lit = -1;
-                int unassigned_lit_cnt = 0;
-                bool has_sat_lit = false;
-                for (int i = cls_begin; i < cls_end; i++)
-                {
-                    int lit = lits[i];
-                    if (assigned[abs(lit)])
-                    {
-                        if (value[abs(lit)] == (lit > 0))
-                        {
-                            has_sat_lit = true;
-                            break;
-                        }
-                    }
-                    else
-                    {
-                        unassigned_lit = lit;
-                        unassigned_lit_cnt++;
-                    }
-                }
-
-                if (has_sat_lit)
-                {
-                    continue;
-                }
-                else if (unassigned_lit_cnt == 0)
-                {
-                    return false;
-                }
-                else if (unassigned_lit_cnt == 1)
-                {
-                    int lit = unassigned_lit;
-                    if (!assigned[abs(lit)])
-                    {
-                        q.emplace_back(lit);
-                        assigned[abs(lit)] = true;
-                        value[abs(lit)] = (lit > 0);
-                    }
-                }
-            }
-        }
-        return true;
-    };
-
-    std::vector<int> q = unit_clauses;
-    for (int lit : cubes)
-        q.emplace_back(lit);
-
-    for (int lit : q)
+    std::function<bool(int)> enqueue = [&](int lit) -> bool
     {
         int v = abs(lit);
         bool val = (lit > 0);
         if (assigned[v])
         {
             if (value[v] != val)
-            {
-                return std::vector<int>({0});
-            }
+                return false;
         }
         else
         {
             assigned[abs(lit)] = true;
             value[abs(lit)] = (lit > 0);
+            q.emplace_back(lit);
+        }
+        return true;
+    };
+
+    for (int lit : unit_clauses)
+        enqueue(lit);
+
+    for (int lit : base_decision_lits)
+        enqueue(lit);
+
+    for (int lit : base_propagated_lits)
+        enqueue(lit);
+
+    unsigned q_pos = q.size();
+
+    for (int lit : new_decision_lits)
+        enqueue(lit);
+
+    // re-propagate at 0 level
+    if (new_decision_lits.size() == 0)
+        q_pos = 0;
+
+    while (q_pos < q.size())
+    {
+        int v = abs(q[q_pos++]);
+
+        auto &ws = value[v] ? neg_watches[v] : pos_watches[v];
+
+        for (int cls_idx : ws)
+        {
+            int unassigned_lit = -1;
+            int unassigned_lit_cnt = 0;
+            bool has_sat_lit = false;
+
+            int cls_begin = get_clause_begin(cls_idx);
+            int cls_end = get_clause_end(cls_idx);
+            for (int i = cls_begin; i < cls_end; i++)
+            {
+                int lit = lits[i];
+                if (assigned[abs(lit)])
+                {
+                    if (value[abs(lit)] == (lit > 0))
+                    {
+                        has_sat_lit = true;
+                        break;
+                    }
+                }
+                else
+                {
+                    unassigned_lit = lit;
+                    unassigned_lit_cnt++;
+                }
+            }
+
+            if (has_sat_lit)
+            {
+                continue;
+            }
+            else if (unassigned_lit_cnt == 0)
+            {
+                return false;
+            }
+            else if (unassigned_lit_cnt == 1)
+            {
+                int lit = unassigned_lit;
+                if (!assigned[abs(lit)])
+                {
+                    q.emplace_back(lit);
+                    new_propagated_lits.push_back(lit);
+                    assigned[abs(lit)] = true;
+                    value[abs(lit)] = (lit > 0);
+                }
+            }
         }
     }
-
-    if (perform_bcp(q))
-    {
-        return q;
-    }
-    else
-    {
-        return std::vector<int>({0});
-    }
+    return true;
 }
