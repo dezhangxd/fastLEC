@@ -430,7 +430,11 @@ void fastLEC::PartitionSAT::worker_func(int cpu_id)
                 {
                     std::shared_ptr<Task> task = pick_split_task();
                     if (task)
-                        split_task_and_submit(task);
+                    {
+                        bool r = split_task_and_submit(task);
+                        if (!r)
+                            terminate_task_by_id(task->id);
+                    }
                     split_mutex.unlock();
                 }
             }
