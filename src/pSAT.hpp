@@ -49,7 +49,7 @@ private:
     std::vector<std::shared_ptr<Task>> all_tasks; // vector to save all tasks
 
     std::atomic<bool> stop;
-    std::atomic<bool> running_cpu_cnt;
+    std::atomic<int> running_cpu_cnt;
 
     std::thread timeout_thread;
     std::atomic<bool> timeout_thread_running;
@@ -87,6 +87,7 @@ public:
     std::shared_ptr<fastLEC::Task> pick_split_task();
     std::vector<int> pick_split_vars(std::shared_ptr<fastLEC::Task> father);
     bool compute_scores();
+    int decide_split_vars();
     bool split_task_and_submit(std::shared_ptr<fastLEC::Task> father);
 
     std::shared_ptr<kissat> get_solver_by_cpu(int cpu_id);

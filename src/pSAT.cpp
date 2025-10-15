@@ -135,6 +135,8 @@ fastLEC::PartitionSAT::PartitionSAT(std::shared_ptr<fastLEC::XAG> xag,
 
     solvers.resize(n_threads, nullptr);
 
+    running_cpu_cnt.store(0);
+
     std::shared_ptr<Task> root_task = std::make_shared<Task>();
     root_task->id = ID_ROOT;
     root_task->father = ID_NONE;
@@ -343,6 +345,8 @@ void fastLEC::PartitionSAT::worker_func(int cpu_id)
         if (!stop.load())
         {
             task->set_state(RUNNING);
+            running_cpu_cnt++;
+
 #ifdef PRT_SOLVING_INFO
             {
                 std::lock_guard<std::shared_mutex> lock(_prt_mtx);
@@ -374,6 +378,7 @@ void fastLEC::PartitionSAT::worker_func(int cpu_id)
             if (task->id == ID_ROOT && task->is_solved())
                 terminate_all_tasks();
 
+            running_cpu_cnt--;
 #ifdef PRT_SOLVING_INFO
 
             std::stringstream ss;
@@ -690,7 +695,7 @@ fastLEC::PartitionSAT::pick_split_vars(std::shared_ptr<fastLEC::Task> father)
         std::swap(candidates_vars[pos], candidates_vars[pos + 1]);
     }
 
-    unsigned pick_var_num = 1;
+    unsigned pick_var_num = this->decide_split_vars();
 
     std::vector<int> pick_vars;
     for (unsigned i = 0; pick_vars.size() < (unsigned)pick_var_num &&

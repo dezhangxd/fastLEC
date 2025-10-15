@@ -2,6 +2,21 @@
 #include "basic.hpp"
 #include "parser.hpp"
 
+int fastLEC::PartitionSAT::decide_split_vars()
+{
+    int ct = 1;
+    double nt = n_threads + 1.0;
+    double np = running_cpu_cnt + 1.0;
+    if (np - nt >= 8 && np / nt >= 4.0)
+        ct = 3;
+    else if (np - nt >= 4 && np / nt >= 1.5)
+        ct = 2;
+    else
+        ct = 1;
+
+    return ct;
+}
+
 std::shared_ptr<fastLEC::Task> fastLEC::PartitionSAT::pick_split_task()
 {
     compute_scores();
