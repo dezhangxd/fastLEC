@@ -30,24 +30,26 @@ std::ostream &operator<<(std::ostream &os, const fastLEC::Gate &gate)
     {
         os << "PI   : ";
         os << std::setw(8) << gate.output;
+        os << "(v";
+        os << std::setw(8) << aiger_var(gate.inputs[0]);
+        os << ")";
     }
-    else if (gate.type == GateType::AND2)
+    else if (gate.type == GateType::AND2 || gate.type == GateType::XOR2)
     {
-        os << "AND2 : ";
+        os << (gate.type == GateType::AND2 ? "AND2" : "XOR2") << " : ";
         os << std::setw(8) << gate.output;
-        os << " <-- ";
+        os << " <l- ";
         os << std::setw(8) << gate.inputs[0];
-        os << " & ";
+        os << (gate.type == GateType::AND2 ? " & " : " ^ ");
         os << std::setw(8) << gate.inputs[1];
-    }
-    else if (gate.type == GateType::XOR2)
-    {
-        os << "XOR2 : ";
-        os << std::setw(8) << gate.output;
-        os << " <-- ";
-        os << std::setw(8) << gate.inputs[0];
-        os << " ^ ";
-        os << std::setw(8) << gate.inputs[1];
+
+        os << " ,      ";
+
+        os << std::setw(8) << aiger_var(gate.output);
+        os << " <v- ";
+        os << std::setw(8) << aiger_var(gate.inputs[0]);
+        os << (gate.type == GateType::AND2 ? " & " : " ^ ");
+        os << std::setw(8) << aiger_var(gate.inputs[1]);
     }
     else
     {
@@ -700,6 +702,8 @@ std::shared_ptr<fastLEC::XAG> XAG::extract_sub_graph(std::vector<int> vec_po)
     // ---------------------------------------------------
     // step 5: mark used literals
     // ---------------------------------------------------
+    sub_xag->v_usr.clear();
+    sub_xag->v_usr.resize(sub_xag->max_var + 1);
     sub_xag->used_lits[sub_xag->PO] = true;
     for (unsigned i = aiger_var(sub_xag->PO); i > sub_xag->PI.size(); i--)
     {
@@ -707,6 +711,8 @@ std::shared_ptr<fastLEC::XAG> XAG::extract_sub_graph(std::vector<int> vec_po)
         int o = g.output;
         int i0 = g.inputs[0];
         int i1 = g.inputs[1];
+        sub_xag->v_usr[aiger_var(i0)].push_back(aiger_var(o));
+        sub_xag->v_usr[aiger_var(i1)].push_back(aiger_var(o));
         if (g.type == XOR2 || sub_xag->used_lits[o])
         {
             sub_xag->used_lits[i0] = true;
@@ -962,6 +968,11 @@ void fastLEC::XAG::compute_cut_points(const std::vector<int> &selected_vars,
     if (selected_vars.empty())
         return;
 
+    for (int v : selected_vars)
+    {
+        std::cout << gates[v] << std::endl;
+    }
+
     std::vector<bool> is_selected(this->max_var + 1, false);
     for (int v : selected_vars)
         is_selected[v] = true;
@@ -976,47 +987,27 @@ void fastLEC::XAG::compute_cut_points(const std::vector<int> &selected_vars,
     {
         neighbors.clear();
 
-        if (gates[u].type != GateType::PI)
+        // check inputs side
         {
-            int i1 = abs(gates[u].inputs[0]);
-            int i2 = abs(gates[u].inputs[1]);
+            int i1 = aiger_var(gates[u].inputs[0]);
+            int i2 = aiger_var(gates[u].inputs[1]);
 
-            if (i1 <= this->max_var && is_selected[i1])
-            {
+            if (is_selected[i1])
                 neighbors.push_back(i1);
-            }
 
-            if (i2 <= this->max_var && is_selected[i2])
-            {
+            if (is_selected[i2])
                 neighbors.push_back(i2);
-            }
         }
 
+        // check output side
         for (int v : this->v_usr[u])
         {
-            if (v <= this->max_var && is_selected[v] &&
-                gates[v].type == GateType::XOR2)
-            {
+            if (is_selected[v])
                 neighbors.push_back(v);
-            }
-        }
-
-        for (int v : selected_vars)
-        {
-            if (v == u)
-                continue;
-            if (gates[v].type == GateType::XOR2)
-            {
-                if (abs(gates[v].inputs[0]) == u ||
-                    abs(gates[v].inputs[1]) == u)
-                {
-                    neighbors.push_back(v);
-                }
-            }
         }
     };
 
-    // DFS
+    // DFS for articulation points (Tarjan's algorithm)
     std::function<void(int)> dfs = [&](int u)
     {
         int children = 0;
@@ -1028,50 +1019,35 @@ void fastLEC::XAG::compute_cut_points(const std::vector<int> &selected_vars,
         for (int v : neighbors)
         {
             if (disc[v] == -1)
-            { // 如果v未被访问
+            {
                 children++;
                 parent[v] = u;
 
                 dfs(v);
 
-                // 更新low值
                 low[u] = std::min(low[u], low[v]);
 
-                // 检查是否为割点
+                // Case 1: If u is root of DFS tree and has two or more children
                 if (parent[u] == -1 && children > 1)
-                {
-                    // u是根节点，并且有多个子树
                     ap[u] = true;
-                }
+
+                // Case 2: If u is not root and low value of one of its child >=
+                // disc[u]
                 if (parent[u] != -1 && low[v] >= disc[u])
-                {
-                    // u不是根节点，但是没有从v到u祖先的后向边
                     ap[u] = true;
-                }
             }
             else if (v != parent[u])
-            {
-                // 更新low值 - 有一条后向边
                 low[u] = std::min(low[u], disc[v]);
-            }
         }
     };
 
     for (int u : selected_vars)
-    {
         if (disc[u] == -1)
-        {
             dfs(u);
-        }
-    }
 
     for (int u : selected_vars)
-    {
         if (ap[u])
-        {
             cut_points.push_back(u);
-        }
-    }
 }
 
 void fastLEC::XAG::compute_v_usr()
@@ -1107,6 +1083,11 @@ void fastLEC::XAG::compute_XOR_chains(
     {
         printf("Error: XAG is not built correctly\n");
         exit(1);
+    }
+    else
+    {
+        printf("XAG is built correctly\n");
+        fflush(stdout);
     }
 
     // Clear previous results
@@ -1155,15 +1136,17 @@ void fastLEC::XAG::compute_XOR_chains(
             const Gate &g = gates[u];
             if (g.type == GateType::XOR2)
             {
-                if (!mask[abs(g.inputs[0])] && !visited[abs(g.inputs[0])])
+                int v1 = aiger_var(g.inputs[0]);
+                int v2 = aiger_var(g.inputs[1]);
+                if (!mask[v1] && !visited[v1])
                 {
-                    visited[abs(g.inputs[0])] = true;
-                    q.push(abs(g.inputs[0]));
+                    visited[v1] = true;
+                    q.push(v1);
                 }
-                if (!mask[abs(g.inputs[1])] && !visited[abs(g.inputs[1])])
+                if (!mask[v2] && !visited[v2])
                 {
-                    visited[abs(g.inputs[1])] = true;
-                    q.push(abs(g.inputs[1]));
+                    visited[v2] = true;
+                    q.push(v2);
                 }
             }
         }
@@ -1201,22 +1184,20 @@ void fastLEC::XAG::compute_XOR_chains(
 
 #ifdef PRT_DEBUG_XAG
     {
-        printf("XOR_chains: %zu\n", XOR_chains.size());
+        printf("c [debug] XOR_chains: %zu\n", XOR_chains.size());
         for (unsigned i = 0; i < XOR_chains.size(); i++)
         {
-            printf("XOR_chain[%d]: ", i);
+            printf("c [debug] XOR_chain[%d]: ", i);
             for (unsigned j = 0; j < XOR_chains[i].size(); j++)
             {
                 printf("%d ", XOR_chains[i][j]);
             }
-            printf("\n");
-            fflush(stdout);
-            printf("important_nodes[%d]: ", i);
+            printf("{ important_nodes[%zu]: ", important_nodes[i].size());
             for (unsigned j = 0; j < important_nodes[i].size(); j++)
             {
                 printf("%d ", important_nodes[i][j]);
             }
-            printf("\n");
+            printf("}\n");
             fflush(stdout);
         }
     }
@@ -1416,7 +1397,7 @@ bool fastLEC::XAG::check_XAG()
         }
     }
 
-    for (int i = 0; i < this->max_var; ++i)
+    for (int i = 1; i <= this->max_var; ++i)
     {
         std::vector<int> a = v_usr[i];
         std::vector<int> b = computed_v_usr[i];
@@ -1434,8 +1415,5 @@ bool fastLEC::XAG::check_XAG()
             return false;
         }
     }
-
-    printf("check_XAG passed\n");
-    fflush(stdout);
     return true;
 }

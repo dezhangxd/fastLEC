@@ -77,6 +77,7 @@ public:
         topo_idx; // the topological sorting index for (AIG variable) of the XAG
     std::vector<std::vector<int>> v_usr; // users (AIG variables) of a XAG
                                          // variable (not consider mediate var)
+    void compute_v_usr();
     void topological_sort(); // compute topo_idx for all the used gates
 
     //---------------------------------------------------
@@ -95,7 +96,6 @@ public:
     //---------------------------------------------------
     // related to scores
     //---------------------------------------------------
-    void compute_v_usr();
     void compute_XOR_block();
     void compute_XOR_chains(const std::vector<bool> &mask, // used nodes
                             std::vector<std::vector<int>> &XOR_chains,
