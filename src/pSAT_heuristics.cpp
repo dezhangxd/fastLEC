@@ -117,8 +117,8 @@ void fastLEC::PartitionSAT::compute_scores(const std::vector<bool> &mask,
                         cnt += 1;
                     }
                 }
-                int i1 = abs(this->xag->gates[v].inputs[0]);
-                int i2 = abs(this->xag->gates[v].inputs[1]);
+                int i1 = aiger_var(this->xag->gates[v].inputs[0]);
+                int i2 = aiger_var(this->xag->gates[v].inputs[1]);
                 if (!mask[i1])
                 {
                     sum += score_bac[i1];

@@ -658,20 +658,11 @@ bool fastLEC::PartitionSAT::split_task_and_submit(
 bool fastLEC::PartitionSAT::compute_mask(std::shared_ptr<Task> task,
                                          std::vector<bool> &mask)
 {
-    std::cout << "c [compute_mask] task->id = " << task->id << std::endl;
-    fflush(stdout);
+
     mask.resize(root_cnf->num_vars + 1, false);
     std::vector<int> nd, np;
     bool res = propagate_task(task, mask, nd, np);
 
-    std::cout << "c [compute_mask] task->id = " << task->id << std::endl;
-    fflush(stdout);
-    for (int i = 1; i <= root_cnf->num_vars; i++)
-    {
-        std::cout << mask[i] << " ";
-    }
-    std::cout << std::endl;
-    fflush(stdout);
     return res;
 }
 

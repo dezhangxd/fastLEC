@@ -16,7 +16,7 @@ extern "C"
 #include <algorithm>
 #include <queue>
 
-#define PRT_DEBUG_XAG
+// #define PRT_DEBUG_XAG
 
 using namespace fastLEC;
 
@@ -878,15 +878,17 @@ void fastLEC::XAG::compute_distance(const std::vector<bool> &mask,
         const Gate &g = this->gates[v];
         if (g.type == GateType::AND2 || g.type == GateType::XOR2)
         {
-            if (!mask[abs(g.inputs[0])])
+            int i1 = aiger_var(g.inputs[0]);
+            int i2 = aiger_var(g.inputs[1]);
+            if (!mask[i1])
             {
                 in_degree[v]++;
-                out_degree[abs(g.inputs[0])]++;
+                out_degree[i1]++;
             }
-            if (!mask[abs(g.inputs[1])])
+            if (!mask[i2])
             {
                 in_degree[v]++;
-                out_degree[abs(g.inputs[1])]++;
+                out_degree[i2]++;
             }
         }
     }
@@ -897,12 +899,6 @@ void fastLEC::XAG::compute_distance(const std::vector<bool> &mask,
             idis[v] = 0;
     }
 
-    printf("in_degree: ");
-    for (int v = 1; v <= this->max_var; v++)
-        printf("%d,%d ", in_degree[v], out_degree[v]);
-    printf("\n");
-    fflush(stdout);
-
     for (int v = 1; v <= this->max_var; v++)
     {
         if (mask[v])
@@ -911,18 +907,15 @@ void fastLEC::XAG::compute_distance(const std::vector<bool> &mask,
         const Gate &g = this->gates[v];
         if (g.type == GateType::AND2 || g.type == GateType::XOR2)
         {
-            if (!mask[abs(g.inputs[0])] && !mask[abs(g.inputs[1])] &&
-                idis[abs(g.inputs[0])] != INT_MAX &&
-                idis[abs(g.inputs[1])] != INT_MAX)
-                idis[v] =
-                    std::max(idis[abs(g.inputs[0])], idis[abs(g.inputs[1])]) +
-                    1;
-            else if (idis[abs(g.inputs[0])] != INT_MAX &&
-                     idis[abs(g.inputs[1])] == INT_MAX)
-                idis[v] = idis[abs(g.inputs[0])]; // this gate becomes eql
-            else if (idis[abs(g.inputs[0])] == INT_MAX &&
-                     idis[abs(g.inputs[1])] != INT_MAX)
-                idis[v] = idis[abs(g.inputs[1])]; // this gate becomes eql
+            int i1 = aiger_var(g.inputs[0]);
+            int i2 = aiger_var(g.inputs[1]);
+            if (!mask[i1] && !mask[i2] && idis[i1] != INT_MAX &&
+                idis[i2] != INT_MAX)
+                idis[v] = std::max(idis[i1], idis[i2]) + 1;
+            else if (idis[i1] != INT_MAX && idis[i2] == INT_MAX)
+                idis[v] = idis[i1]; // this gate becomes eql
+            else if (idis[i1] == INT_MAX && idis[i2] != INT_MAX)
+                idis[v] = idis[i2]; // this gate becomes eql
             else
                 idis[v] = INT_MAX;
         }
@@ -942,20 +935,25 @@ void fastLEC::XAG::compute_distance(const std::vector<bool> &mask,
         const Gate &g = this->gates[v];
         if (g.type == GateType::AND2 || g.type == GateType::XOR2)
         {
-            if (!mask[abs(g.inputs[0])] && odis[v] != INT_MAX)
-                odis[abs(g.inputs[0])] =
-                    std::min(odis[abs(g.inputs[0])], odis[v] + 1);
-            if (!mask[abs(g.inputs[1])] && odis[v] != INT_MAX)
-                odis[abs(g.inputs[1])] =
-                    std::min(odis[abs(g.inputs[1])], odis[v] + 1);
+            int i1 = aiger_var(g.inputs[0]);
+            int i2 = aiger_var(g.inputs[1]);
+            if (!mask[i1] && odis[v] != INT_MAX)
+                odis[i1] = std::min(odis[i1], odis[v] + 1);
+            if (!mask[i2] && odis[v] != INT_MAX)
+                odis[i2] = std::min(odis[i2], odis[v] + 1);
         }
     }
 
 #ifdef PRT_DEBUG_XAG
     {
-        printf("in_degree: ");
+        printf("c [debug]in_out_degree: ");
         for (int i = 1; i <= this->max_var; i++)
-            printf("%d,%d ", in_degree[i], odis[i]);
+            printf("%d:%d,%d ", i, in_degree[i], out_degree[i]);
+        printf("\n");
+        fflush(stdout);
+        printf("c [debug] idis, odis: ");
+        for (int i = 1; i <= this->max_var; i++)
+            printf("%d: %d,%d ", i, idis[i], odis[i]);
         printf("\n");
         fflush(stdout);
     }
@@ -967,11 +965,6 @@ void fastLEC::XAG::compute_cut_points(const std::vector<int> &selected_vars,
 {
     if (selected_vars.empty())
         return;
-
-    for (int v : selected_vars)
-    {
-        std::cout << gates[v] << std::endl;
-    }
 
     std::vector<bool> is_selected(this->max_var + 1, false);
     for (int v : selected_vars)
@@ -1060,16 +1053,6 @@ void fastLEC::XAG::compute_v_usr()
         this->v_usr[aiger_var(g.inputs[0])].push_back(gid);
         this->v_usr[aiger_var(g.inputs[1])].push_back(gid);
     }
-    printf("v_usr.size(): %zu\n", this->v_usr.size());
-    fflush(stdout);
-    for (int i = 1; i <= this->max_var; i++)
-    {
-        printf("v_usr[%d]: ", i);
-        for (int j : this->v_usr[i])
-            printf("%d ", j);
-        printf("\n");
-    }
-    fflush(stdout);
 }
 
 void fastLEC::XAG::compute_XOR_chains(
@@ -1077,7 +1060,7 @@ void fastLEC::XAG::compute_XOR_chains(
     std::vector<std::vector<int>> &XOR_chains,
     std::vector<std::vector<int>> &important_nodes)
 {
-
+#ifdef PRT_DEBUG_XAG
     bool b_res = check_XAG();
     if (!b_res)
     {
@@ -1089,6 +1072,7 @@ void fastLEC::XAG::compute_XOR_chains(
         printf("XAG is built correctly\n");
         fflush(stdout);
     }
+#endif
 
     // Clear previous results
     XOR_chains.clear();
@@ -1168,15 +1152,6 @@ void fastLEC::XAG::compute_XOR_chains(
 
             // Find cut points in this chain
             std::vector<int> cut_points;
-            printf("chain.size(): %zu\n", chain.size());
-            fflush(stdout);
-            for (int u : chain)
-            {
-                printf("%d ", u);
-            }
-            printf("\n");
-            fflush(stdout);
-
             compute_cut_points(chain, cut_points);
             important_nodes.push_back(cut_points);
         }
