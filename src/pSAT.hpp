@@ -89,6 +89,7 @@ public:
 
     std::shared_ptr<fastLEC::Task> pick_split_task();
     std::vector<int> pick_split_vars(std::shared_ptr<fastLEC::Task> father);
+    bool check_repeat(std::vector<int> &cube_vars) const;
     bool compute_scores();
     int decide_split_vars();
     bool split_task_and_submit(std::shared_ptr<fastLEC::Task> father);

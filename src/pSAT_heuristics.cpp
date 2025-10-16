@@ -93,11 +93,11 @@ void fastLEC::PartitionSAT::compute_scores(const std::vector<bool> &mask,
         }
         for (auto v : important_nodes[i])
         {
-            scores[v] *= 10.0;
+            scores[v] *= 5.0;
         }
     }
 
-    int prop_lev = 2;
+    int prop_lev = 3;
     double beta = 10.0;
     for (int i = 0; i < prop_lev; i++)
     {
@@ -106,7 +106,6 @@ void fastLEC::PartitionSAT::compute_scores(const std::vector<bool> &mask,
         {
             if (!mask[v])
             {
-                // 计算v的邻居的平均得分
                 double sum = 0.0;
                 double cnt = 0;
                 for (auto u : this->xag->v_usr[v])

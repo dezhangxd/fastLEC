@@ -580,6 +580,38 @@ void fastLEC::PartitionSAT::terminate_all_tasks()
         t->terminate_info_upd();
 }
 
+bool fastLEC::PartitionSAT::check_repeat(std::vector<int> &cube_var) const
+{
+    int cnt = 1;
+    std::vector<int> mark(root_cnf->num_vars + 1, 0);
+    for (auto &task : all_tasks)
+    {
+        // check cube_var in task->cube
+        if (cube_var.size() > task->cube.size())
+            continue;
+
+        for (int l : task->cube)
+            mark[abs(l)] = cnt;
+
+        bool is_subset = true;
+        for (int v : cube_var)
+        {
+            if (mark[v] != cnt)
+            {
+                is_subset = false;
+                break;
+            }
+        }
+        if (is_subset)
+            return true;
+        cnt++;
+    }
+
+    return false;
+}
+
+// return true if we cannot split this task now
+// return false if father is solved
 bool fastLEC::PartitionSAT::split_task_and_submit(
     std::shared_ptr<fastLEC::Task> father)
 {
@@ -589,6 +621,16 @@ bool fastLEC::PartitionSAT::split_task_and_submit(
 
     if (father->is_solved())
         return false;
+
+    if (split_vars.size() == 0)
+        return true;
+
+    std::vector<int> split_vars_tmp = split_vars;
+    for (int l : father->cube)
+        split_vars_tmp.push_back(abs(l));
+    bool is_repeat = check_repeat(split_vars_tmp);
+    if (is_repeat)
+        return true;
 
     std::vector<std::shared_ptr<fastLEC::Task>> sons;
     std::vector<int> sons_ids;
@@ -610,8 +652,9 @@ bool fastLEC::PartitionSAT::split_task_and_submit(
         new_task->new_cube_lit_cnt = split_vars.size();
 
         sons.push_back(new_task);
-        // Note: new_task->id will be set in submit_task, so we can't use it
-        // here sons_ids will be populated after submit_task calls
+        // Note: new_task->id will be set in submit_task, so we can't
+        // use it here sons_ids will be populated after submit_task
+        // calls
 
         if (father->is_solved())
             break;
@@ -623,8 +666,8 @@ bool fastLEC::PartitionSAT::split_task_and_submit(
         for (unsigned i = 0; i < sons.size(); i++)
         {
             int task_id = submit_task(std::move(sons[i]));
-            // The task ID is set in submit_task, so we need to get it from the
-            // last added task
+            // The task ID is set in submit_task, so we need to get it
+            // from the last added task
             sons_ids.push_back(task_id);
         }
         father->sons.push_back(sons_ids);
@@ -699,7 +742,7 @@ fastLEC::PartitionSAT::pick_split_vars(std::shared_ptr<fastLEC::Task> father)
                   return scores[x] > scores[y];
               });
 
-    int num_swaps = candidates_vars.size() * 0.1;
+    int num_swaps = candidates_vars.size() * 0.3;
     for (int i = 0; i < num_swaps; ++i)
     {
         int pos = fastLEC::ResMgr::get().random_uint64() %
