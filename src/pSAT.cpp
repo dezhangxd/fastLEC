@@ -131,8 +131,6 @@ fastLEC::PartitionSAT::PartitionSAT(std::shared_ptr<fastLEC::XAG> xag,
 
     all_task_terminated.store(false);
 
-    scores.resize(root_cnf->num_vars + 1, 1.0);
-
     solvers.resize(n_threads, nullptr);
 
     running_cpu_cnt.store(0);
@@ -657,17 +655,40 @@ bool fastLEC::PartitionSAT::split_task_and_submit(
         return false;
 }
 
+bool fastLEC::PartitionSAT::compute_mask(std::shared_ptr<Task> task,
+                                         std::vector<bool> &mask)
+{
+    std::cout << "c [compute_mask] task->id = " << task->id << std::endl;
+    fflush(stdout);
+    mask.resize(root_cnf->num_vars + 1, false);
+    std::vector<int> nd, np;
+    bool res = propagate_task(task, mask, nd, np);
+
+    std::cout << "c [compute_mask] task->id = " << task->id << std::endl;
+    fflush(stdout);
+    for (int i = 1; i <= root_cnf->num_vars; i++)
+    {
+        std::cout << mask[i] << " ";
+    }
+    std::cout << std::endl;
+    fflush(stdout);
+    return res;
+}
+
 std::vector<int>
 fastLEC::PartitionSAT::pick_split_vars(std::shared_ptr<fastLEC::Task> father)
 {
     std::vector<int> propagated_lits = father->cube;
 
-    std::vector<bool> forbidden_vars(root_cnf->num_vars + 1, false);
-    std::vector<int> nd, np;
-    bool res = propagate_task(father, forbidden_vars, nd, np);
+    std::vector<bool> mask(root_cnf->num_vars + 1, false);
+
+    bool res = compute_mask(father, mask);
 
     if (!res)
         return std::vector<int>({0});
+
+    std::vector<double> scores;
+    compute_scores(mask, scores);
 
     std::vector<int> candidates_vars;
 
@@ -676,7 +697,7 @@ fastLEC::PartitionSAT::pick_split_vars(std::shared_ptr<fastLEC::Task> father)
         if (scores[i] <= 0.0)
             continue;
 
-        if (!forbidden_vars[i])
+        if (!mask[i])
             candidates_vars.emplace_back(i);
     }
 

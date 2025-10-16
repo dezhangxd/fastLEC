@@ -1,5 +1,5 @@
 #include "pSAT.hpp"
-#include "basic.hpp"
+#include "XAG.hpp"
 #include "parser.hpp"
 
 int fastLEC::PartitionSAT::decide_split_vars()
@@ -19,7 +19,6 @@ int fastLEC::PartitionSAT::decide_split_vars()
 
 std::shared_ptr<fastLEC::Task> fastLEC::PartitionSAT::pick_split_task()
 {
-    compute_scores();
     unsigned max_split = fastLEC::Param::get().custom_params.gt_max_split;
     double max_rt = -1;
     std::shared_ptr<Task> target_task = nullptr;
@@ -68,15 +67,74 @@ std::shared_ptr<fastLEC::Task> fastLEC::PartitionSAT::pick_split_task()
         return target_task;
 }
 
-bool fastLEC::PartitionSAT::compute_scores()
+void fastLEC::PartitionSAT::compute_scores(const std::vector<bool> &mask,
+                                           std::vector<double> &scores)
 {
-    for (int i = 1; i <= root_cnf->num_vars; i++)
+    std::vector<std::vector<int>> XOR_chains;
+    std::vector<std::vector<int>> important_nodes;
+    this->xag->compute_XOR_chains(mask, XOR_chains, important_nodes);
+
+    std::vector<int> in_degree;
+    std::vector<int> out_degree;
+    std::vector<int> idis;
+    std::vector<int> odis;
+    this->xag->compute_distance(mask, in_degree, out_degree, idis, odis);
+
+    scores.resize(root_cnf->num_vars + 1, 1.0);
+
+    for (unsigned i = 0; i < XOR_chains.size(); i++)
     {
-        scores[i] = 1.0 + fastLEC::ResMgr::get().random_double(0.0, 1.0);
-        scores[227] += 1000.0;
-        scores[243] += 1000.0;
-        // printf("score[%d] = %f\n", i, scores[i]);
-        // fflush(stdout);
+        for (auto v : XOR_chains[i])
+        {
+            double alpha = 0.6;
+            double dis = alpha * odis[v] + (1 - alpha) * idis[v] + 1.0;
+            scores[v] = std::pow(XOR_chains[i].size(), 2.0) *
+                log2(root_cnf->num_vars) / dis;
+        }
+        for (auto v : important_nodes[i])
+        {
+            scores[v] *= 10.0;
+        }
     }
-    return true;
+
+    int prop_lev = 2;
+    double beta = 10.0;
+    for (int i = 0; i < prop_lev; i++)
+    {
+        std::vector<double> score_bac = scores;
+        for (int v = 1; v <= root_cnf->num_vars; v++)
+        {
+            if (!mask[v])
+            {
+                // 计算v的邻居的平均得分
+                double sum = 0.0;
+                double cnt = 0;
+                for (auto u : this->xag->v_usr[v])
+                {
+                    if (!mask[u])
+                    {
+                        sum += score_bac[u];
+                        cnt += 1;
+                    }
+                }
+                int i1 = abs(this->xag->gates[v].inputs[0]);
+                int i2 = abs(this->xag->gates[v].inputs[1]);
+                if (!mask[i1])
+                {
+                    sum += score_bac[i1];
+                    cnt += 1;
+                }
+                if (!mask[i2])
+                {
+                    sum += score_bac[i2];
+                    cnt += 1;
+                }
+
+                sum += beta * cnt * score_bac[v];
+                cnt += beta * cnt;
+
+                scores[v] = sum / cnt;
+            }
+        }
+    }
 }

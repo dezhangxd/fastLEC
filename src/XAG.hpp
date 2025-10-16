@@ -65,8 +65,9 @@ public:
     //---------------------------------------------------
     // gates
     //---------------------------------------------------
-    std::vector<Gate> gates;     // the gates (only considering AND and XOR)
-    std::vector<int> used_gates; // the used gates (AIG variable) in the XAG
+    std::vector<Gate> gates; // the gates (only considering AND and XOR)
+    std::vector<int>
+        used_gates; // the used gates (AIG variable) in the XAG (no PI gates)
     std::vector<bool> used_lits; // whether (AIG) literals are used in the XAG
 
     //---------------------------------------------------
@@ -92,6 +93,22 @@ public:
     extract_sub_graph(const std::vector<int> vec_po);
 
     //---------------------------------------------------
+    // related to scores
+    //---------------------------------------------------
+    void compute_v_usr();
+    void compute_XOR_block();
+    void compute_XOR_chains(const std::vector<bool> &mask, // used nodes
+                            std::vector<std::vector<int>> &XOR_chains,
+                            std::vector<std::vector<int>> &important_nodes);
+    void compute_distance(const std::vector<bool> &mask, // used nodes
+                          std::vector<int> &in_degree,
+                          std::vector<int> &out_degree,
+                          std::vector<int> &idis,  // distance to inputs
+                          std::vector<int> &odis); // distance to output
+
+    void compute_cut_points(const std::vector<int> &selected_vars,
+                            std::vector<int> &cut_points);
+    //---------------------------------------------------
     // XAG useless variable elimination and remapping
     //---------------------------------------------------
     std::vector<int> var_replace;
@@ -113,6 +130,8 @@ public:
     std::vector<int> lmap_xag_to_cnf;
     int to_cnf_var(int xag_var);
     int to_cnf_lit(int xag_lit);
+
+    bool check_XAG();
 };
 
 } // namespace fastLEC

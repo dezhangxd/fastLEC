@@ -9,11 +9,14 @@ extern "C"
 
 #include <cassert>
 #include <cstdio>
+#include <climits>
 #include <iomanip>
 #include <iostream>
 #include <stdexcept>
 #include <algorithm>
 #include <queue>
+
+#define PRT_DEBUG_XAG
 
 using namespace fastLEC;
 
@@ -651,7 +654,12 @@ std::shared_ptr<fastLEC::XAG> XAG::extract_sub_graph(std::vector<int> vec_po)
     {
         int v_i = find_father(aiger_var(l));
         if (use_flag[v_i])
-            sub_xag->PI.push_back(mapper[aiger_pos_lit(v_i)]);
+        {
+            int pi_l = mapper[aiger_pos_lit(v_i)];
+            sub_xag->PI.push_back(pi_l);
+            sub_xag->gates[aiger_var(pi_l)] =
+                fastLEC::Gate(pi_l, GateType::PI, 0, 0);
+        }
     }
     sub_xag->num_PIs_org = sub_xag->PI.size();
 
@@ -842,4 +850,592 @@ std::shared_ptr<fastLEC::AIG> XAG::construct_aig_from_this_xag()
     }
 
     return aig;
+}
+
+void fastLEC::XAG::compute_distance(const std::vector<bool> &mask,
+                                    std::vector<int> &in_degree,
+                                    std::vector<int> &out_degree,
+                                    std::vector<int> &idis,
+                                    std::vector<int> &odis)
+{
+    idis.resize(this->max_var + 1, INT_MAX);
+    odis.resize(this->max_var + 1, INT_MAX);
+
+    in_degree.resize(this->max_var + 1, 0);
+    out_degree.resize(this->max_var + 1, 0);
+
+    for (int v = 1; v <= this->max_var; v++)
+    {
+        if (mask[v])
+            continue;
+
+        const Gate &g = this->gates[v];
+        if (g.type == GateType::AND2 || g.type == GateType::XOR2)
+        {
+            if (!mask[abs(g.inputs[0])])
+            {
+                in_degree[v]++;
+                out_degree[abs(g.inputs[0])]++;
+            }
+            if (!mask[abs(g.inputs[1])])
+            {
+                in_degree[v]++;
+                out_degree[abs(g.inputs[1])]++;
+            }
+        }
+    }
+
+    for (int v = 1; v <= this->max_var; v++)
+    {
+        if (!mask[v] && in_degree[v] == 0)
+            idis[v] = 0;
+    }
+
+    printf("in_degree: ");
+    for (int v = 1; v <= this->max_var; v++)
+        printf("%d,%d ", in_degree[v], out_degree[v]);
+    printf("\n");
+    fflush(stdout);
+
+    for (int v = 1; v <= this->max_var; v++)
+    {
+        if (mask[v])
+            continue;
+
+        const Gate &g = this->gates[v];
+        if (g.type == GateType::AND2 || g.type == GateType::XOR2)
+        {
+            if (!mask[abs(g.inputs[0])] && !mask[abs(g.inputs[1])] &&
+                idis[abs(g.inputs[0])] != INT_MAX &&
+                idis[abs(g.inputs[1])] != INT_MAX)
+                idis[v] =
+                    std::max(idis[abs(g.inputs[0])], idis[abs(g.inputs[1])]) +
+                    1;
+            else if (idis[abs(g.inputs[0])] != INT_MAX &&
+                     idis[abs(g.inputs[1])] == INT_MAX)
+                idis[v] = idis[abs(g.inputs[0])]; // this gate becomes eql
+            else if (idis[abs(g.inputs[0])] == INT_MAX &&
+                     idis[abs(g.inputs[1])] != INT_MAX)
+                idis[v] = idis[abs(g.inputs[1])]; // this gate becomes eql
+            else
+                idis[v] = INT_MAX;
+        }
+    }
+
+    for (int v = 1; v <= this->max_var; v++)
+    {
+        if (!mask[v] && out_degree[v] == 0)
+            odis[v] = 0;
+    }
+
+    for (int v = this->max_var; v >= 1; v--)
+    {
+        if (mask[v])
+            continue;
+
+        const Gate &g = this->gates[v];
+        if (g.type == GateType::AND2 || g.type == GateType::XOR2)
+        {
+            if (!mask[abs(g.inputs[0])] && odis[v] != INT_MAX)
+                odis[abs(g.inputs[0])] =
+                    std::min(odis[abs(g.inputs[0])], odis[v] + 1);
+            if (!mask[abs(g.inputs[1])] && odis[v] != INT_MAX)
+                odis[abs(g.inputs[1])] =
+                    std::min(odis[abs(g.inputs[1])], odis[v] + 1);
+        }
+    }
+
+#ifdef PRT_DEBUG_XAG
+    {
+        printf("in_degree: ");
+        for (int i = 1; i <= this->max_var; i++)
+            printf("%d,%d ", in_degree[i], odis[i]);
+        printf("\n");
+        fflush(stdout);
+    }
+#endif
+}
+
+void fastLEC::XAG::compute_cut_points(const std::vector<int> &selected_vars,
+                                      std::vector<int> &cut_points)
+{
+    if (selected_vars.empty())
+        return;
+
+    std::vector<bool> is_selected(this->max_var + 1, false);
+    for (int v : selected_vars)
+        is_selected[v] = true;
+
+    int time = 0;
+    std::vector<int> disc(this->max_var + 1, -1);
+    std::vector<int> low(this->max_var + 1, -1);
+    std::vector<int> parent(this->max_var + 1, -1);
+    std::vector<bool> ap(this->max_var + 1, false);
+
+    auto get_neighbors = [&](int u, std::vector<int> &neighbors)
+    {
+        neighbors.clear();
+
+        if (gates[u].type != GateType::PI)
+        {
+            int i1 = abs(gates[u].inputs[0]);
+            int i2 = abs(gates[u].inputs[1]);
+
+            if (i1 <= this->max_var && is_selected[i1])
+            {
+                neighbors.push_back(i1);
+            }
+
+            if (i2 <= this->max_var && is_selected[i2])
+            {
+                neighbors.push_back(i2);
+            }
+        }
+
+        for (int v : this->v_usr[u])
+        {
+            if (v <= this->max_var && is_selected[v] &&
+                gates[v].type == GateType::XOR2)
+            {
+                neighbors.push_back(v);
+            }
+        }
+
+        for (int v : selected_vars)
+        {
+            if (v == u)
+                continue;
+            if (gates[v].type == GateType::XOR2)
+            {
+                if (abs(gates[v].inputs[0]) == u ||
+                    abs(gates[v].inputs[1]) == u)
+                {
+                    neighbors.push_back(v);
+                }
+            }
+        }
+    };
+
+    // DFS
+    std::function<void(int)> dfs = [&](int u)
+    {
+        int children = 0;
+        disc[u] = low[u] = ++time;
+
+        std::vector<int> neighbors;
+        get_neighbors(u, neighbors);
+
+        for (int v : neighbors)
+        {
+            if (disc[v] == -1)
+            { // 如果v未被访问
+                children++;
+                parent[v] = u;
+
+                dfs(v);
+
+                // 更新low值
+                low[u] = std::min(low[u], low[v]);
+
+                // 检查是否为割点
+                if (parent[u] == -1 && children > 1)
+                {
+                    // u是根节点，并且有多个子树
+                    ap[u] = true;
+                }
+                if (parent[u] != -1 && low[v] >= disc[u])
+                {
+                    // u不是根节点，但是没有从v到u祖先的后向边
+                    ap[u] = true;
+                }
+            }
+            else if (v != parent[u])
+            {
+                // 更新low值 - 有一条后向边
+                low[u] = std::min(low[u], disc[v]);
+            }
+        }
+    };
+
+    for (int u : selected_vars)
+    {
+        if (disc[u] == -1)
+        {
+            dfs(u);
+        }
+    }
+
+    for (int u : selected_vars)
+    {
+        if (ap[u])
+        {
+            cut_points.push_back(u);
+        }
+    }
+}
+
+void fastLEC::XAG::compute_v_usr()
+{
+    this->v_usr.clear();
+    this->v_usr.resize(this->max_var + 1);
+    for (auto gid : this->used_gates)
+    {
+        const Gate &g = this->gates[gid];
+        this->v_usr[aiger_var(g.inputs[0])].push_back(gid);
+        this->v_usr[aiger_var(g.inputs[1])].push_back(gid);
+    }
+    printf("v_usr.size(): %zu\n", this->v_usr.size());
+    fflush(stdout);
+    for (int i = 1; i <= this->max_var; i++)
+    {
+        printf("v_usr[%d]: ", i);
+        for (int j : this->v_usr[i])
+            printf("%d ", j);
+        printf("\n");
+    }
+    fflush(stdout);
+}
+
+void fastLEC::XAG::compute_XOR_chains(
+    const std::vector<bool> &mask,
+    std::vector<std::vector<int>> &XOR_chains,
+    std::vector<std::vector<int>> &important_nodes)
+{
+
+    bool b_res = check_XAG();
+    if (!b_res)
+    {
+        printf("Error: XAG is not built correctly\n");
+        exit(1);
+    }
+
+    // Clear previous results
+    XOR_chains.clear();
+    important_nodes.clear();
+
+    if (this->v_usr.empty())
+        compute_v_usr();
+
+    // Find connected components using BFS
+    std::vector<bool> visited(this->max_var + 1, false);
+
+    for (int v = 1; v <= this->max_var; v++)
+    {
+        if (mask[v] || visited[v])
+            continue;
+
+        // Start a new XOR chain
+        std::vector<int> chain;
+        std::queue<int> q;
+        q.push(v);
+        visited[v] = true;
+
+        while (!q.empty())
+        {
+            int u = q.front();
+            q.pop();
+            chain.push_back(u);
+
+            // Use nexts to find connected nodes
+            for (int w : this->v_usr[u])
+            {
+                assert(w > 0);
+                if (mask[w] || visited[w])
+                    continue;
+
+                // Check if the connection is through an XOR gate
+                const Gate &g = gates[w];
+                if (g.type == GateType::XOR2 && !mask[w] && !visited[w])
+                {
+                    visited[w] = true;
+                    q.push(w);
+                }
+            }
+
+            const Gate &g = gates[u];
+            if (g.type == GateType::XOR2)
+            {
+                if (!mask[abs(g.inputs[0])] && !visited[abs(g.inputs[0])])
+                {
+                    visited[abs(g.inputs[0])] = true;
+                    q.push(abs(g.inputs[0]));
+                }
+                if (!mask[abs(g.inputs[1])] && !visited[abs(g.inputs[1])])
+                {
+                    visited[abs(g.inputs[1])] = true;
+                    q.push(abs(g.inputs[1]));
+                }
+            }
+        }
+
+        // Only add chains that contain at least one XOR gate
+        bool has_xor = false;
+        for (int u : chain)
+        {
+            if (gates[u].type == GateType::XOR2)
+            {
+                has_xor = true;
+                break;
+            }
+        }
+
+        if (has_xor)
+        {
+            XOR_chains.push_back(chain);
+
+            // Find cut points in this chain
+            std::vector<int> cut_points;
+            printf("chain.size(): %zu\n", chain.size());
+            fflush(stdout);
+            for (int u : chain)
+            {
+                printf("%d ", u);
+            }
+            printf("\n");
+            fflush(stdout);
+
+            compute_cut_points(chain, cut_points);
+            important_nodes.push_back(cut_points);
+        }
+    }
+
+#ifdef PRT_DEBUG_XAG
+    {
+        printf("XOR_chains: %zu\n", XOR_chains.size());
+        for (unsigned i = 0; i < XOR_chains.size(); i++)
+        {
+            printf("XOR_chain[%d]: ", i);
+            for (unsigned j = 0; j < XOR_chains[i].size(); j++)
+            {
+                printf("%d ", XOR_chains[i][j]);
+            }
+            printf("\n");
+            fflush(stdout);
+            printf("important_nodes[%d]: ", i);
+            for (unsigned j = 0; j < important_nodes[i].size(); j++)
+            {
+                printf("%d ", important_nodes[i][j]);
+            }
+            printf("\n");
+            fflush(stdout);
+        }
+    }
+#endif
+}
+
+bool fastLEC::XAG::check_XAG()
+{
+    // Check max_var
+    int computed_max_var = -1;
+    for (const auto &gate : gates)
+    {
+        if (aiger_var(gate.output) > computed_max_var)
+            computed_max_var = aiger_var(gate.output);
+        for (int i = 0; i < 2; ++i)
+        {
+            if (aiger_var(gate.inputs[i]) > computed_max_var)
+                computed_max_var = aiger_var(gate.inputs[i]);
+        }
+    }
+    if (computed_max_var != max_var)
+    {
+        printf("[check_XAG] max_var check failed: max_var=%d, "
+               "computed_max_var=%d\n",
+               max_var,
+               computed_max_var);
+        return false;
+    }
+
+    // check gates indices
+    for (int v = 0; v <= max_var; v++)
+    {
+        if (v != aiger_var(this->gates[v].output))
+        {
+            printf("[check_XAG] gates[%d] output mismatch: %d != %d\n",
+                   v,
+                   aiger_var(v),
+                   this->gates[v].output);
+            std::cout << gates[v] << std::endl;
+            return false;
+        }
+    }
+
+    // Check PI: collect all gate outputs marked as PI, convert to aiger_var
+    std::vector<int> computed_PI;
+    for (const auto &gate : gates)
+    {
+        if (gate.type == fastLEC::GateType::PI)
+        {
+            computed_PI.push_back(gate.output);
+        }
+    }
+    std::sort(computed_PI.begin(), computed_PI.end());
+    std::vector<int> sorted_PI = PI;
+    std::sort(sorted_PI.begin(), sorted_PI.end());
+    if (computed_PI != sorted_PI)
+    {
+        printf("[check_XAG] PI check failed.\nCurrent PI: ");
+        for (auto v : PI)
+            printf("%d ", v);
+        printf("\nComputed PI: ");
+        for (auto v : computed_PI)
+            printf("%d ", v);
+        printf("\n");
+        return false;
+    }
+
+    // Compute used_lits and used_gates
+    std::vector<int> computed_used_gates;
+    std::vector<bool> computed_used_lits(2 * (max_var + 1), false); // mask
+
+    std::queue<int> q;
+    q.push(PO);
+    computed_used_lits[PO] = true;
+
+    while (!q.empty())
+    {
+        int lit = q.front();
+        q.pop();
+
+        const Gate &gate = gates[aiger_var(lit)];
+
+        if (gate.type == fastLEC::GateType::XOR2 ||
+            gate.type == fastLEC::GateType::AND2)
+        {
+            computed_used_gates.push_back(aiger_var(lit));
+
+            if (!computed_used_lits[gate.inputs[0]] &&
+                !computed_used_lits[aiger_not(gate.inputs[0])])
+            {
+                q.push(gate.inputs[0]);
+            }
+
+            if (!computed_used_lits[gate.inputs[1]] &&
+                !computed_used_lits[aiger_not(gate.inputs[1])])
+            {
+                q.push(gate.inputs[1]);
+            }
+
+            if (computed_used_lits[aiger_not(gate.output)] ||
+                gate.type == fastLEC::GateType::XOR2)
+            {
+                computed_used_lits[aiger_not(gate.inputs[0])] = true;
+                computed_used_lits[aiger_not(gate.inputs[1])] = true;
+            }
+
+            if (computed_used_lits[gate.output] ||
+                gate.type == fastLEC::GateType::XOR2)
+            {
+                computed_used_lits[(gate.inputs[0])] = true;
+                computed_used_lits[(gate.inputs[1])] = true;
+            }
+        }
+    }
+
+    computed_PI.clear();
+    {
+        for (int i = 0; i < max_var + 1; i++)
+        {
+            if (gates[i].type == fastLEC::GateType::PI &&
+                (computed_used_lits[aiger_pos_lit(i)] ||
+                 computed_used_lits[aiger_neg_lit(i)]))
+            {
+                computed_PI.push_back(aiger_pos_lit(i));
+            }
+        }
+    }
+
+    for (int i = 1; i < max_var; i++)
+    {
+        if (!computed_used_lits[aiger_pos_lit(i)] &&
+            !computed_used_lits[aiger_neg_lit(i)])
+        {
+            printf("Error: this gate is not used: %d\n", i);
+        }
+    }
+
+    std::vector<int> sorted_computed_PI = computed_PI;
+    std::vector<int> sorted_this_PI = PI;
+    std::sort(sorted_computed_PI.begin(), sorted_computed_PI.end());
+    std::sort(sorted_this_PI.begin(), sorted_this_PI.end());
+    if (sorted_computed_PI != sorted_this_PI)
+    {
+        printf("[check_XAG] PI (after used_lits scan) mismatch.\nCurrent PI: ");
+        for (auto v : PI)
+            printf("%d ", v);
+        printf("\nComputed  PI: ");
+        for (auto v : computed_PI)
+            printf("%d ", v);
+        printf("\n");
+        return false;
+    }
+
+    std::vector<int> sorted_used_gates = used_gates;
+    std::sort(computed_used_gates.begin(), computed_used_gates.end());
+    std::sort(sorted_used_gates.begin(), sorted_used_gates.end());
+    if (computed_used_gates != sorted_used_gates)
+    {
+        printf("[check_XAG] used_gates check failed.\nCurrent used_gates: ");
+        for (auto v : used_gates)
+            printf("%d ", v);
+        printf("\nComputed used_gates: ");
+        for (auto v : computed_used_gates)
+            printf("%d ", v);
+        printf("\n");
+        return false;
+    }
+
+    bool used_lits_mismatch = false;
+    for (size_t i = 0; i < used_lits.size(); ++i)
+    {
+        if (used_lits[i] != computed_used_lits[i])
+        {
+            printf("[check_XAG] used_lits (mask) mismatch at literal %zu. "
+                   "used_lits: "
+                   "%d, computed: %d\n",
+                   i,
+                   used_lits[i] ? 1 : 0,
+                   computed_used_lits[i] ? 1 : 0);
+            used_lits_mismatch = true;
+        }
+    }
+    if (used_lits_mismatch)
+        return false;
+
+    // Check v_usr (users list)
+    // Build users by aiger variable
+    int nvar = max_var + 1;
+    std::vector<std::vector<int>> computed_v_usr(nvar);
+    for (const auto &gate : gates)
+    {
+        int out_var = aiger_var(gate.output);
+        for (int i = 0; i < 2; ++i)
+        {
+            int in_var = aiger_var(gate.inputs[i]);
+            computed_v_usr[in_var].push_back(out_var);
+        }
+    }
+
+    for (int i = 0; i < this->max_var; ++i)
+    {
+        std::vector<int> a = v_usr[i];
+        std::vector<int> b = computed_v_usr[i];
+        std::sort(a.begin(), a.end());
+        std::sort(b.begin(), b.end());
+        if (a != b)
+        {
+            printf("[check_XAG] v_usr mismatch at var %d. v_usr:", i);
+            for (auto x : a)
+                printf("%d ", x);
+            printf(" computed:");
+            for (auto x : b)
+                printf("%d ", x);
+            printf("\n");
+            return false;
+        }
+    }
+
+    printf("check_XAG passed\n");
+    fflush(stdout);
+    return true;
 }

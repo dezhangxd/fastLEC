@@ -17,6 +17,7 @@ command="-m pSAT_sweeping -c 16 -v 2 -t 50"
 
 # rm -rf *.aig
 # ./${BUILD_DIR}/bin/fastLEC -i ../ins/all/test_11_TOP4.aiger $command |gnomon
+# valgrind 
 ./${BUILD_DIR}/bin/fastLEC -i ../ins/all/test_11_TOP6.aiger $command |gnomon
 # ./${BUILD_DIR}/bin/fastLEC -i ../ins/all/test_16_TOP30.aiger $command |gnomon
 

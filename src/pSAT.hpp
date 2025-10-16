@@ -59,12 +59,15 @@ private:
     std::atomic<bool> states_updated;
     std::atomic<bool> all_task_terminated;
 
-    std::mutex split_mutex; //
+    std::mutex split_mutex; // only one task can be split at a time
 
     void timeout_monitor_func();
 
     // ------------------------------------------------------------
-    std::vector<double> scores;
+    // mask is variables that should not be used.
+    bool compute_mask(std::shared_ptr<Task> task, std::vector<bool> &mask);
+    void compute_scores(const std::vector<bool> &mask,
+                        std::vector<double> &scores);
     // ------------------------------------------------------------
 
 public:
