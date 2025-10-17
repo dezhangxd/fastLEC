@@ -3,7 +3,6 @@
 #include <cstdio>
 #include <cassert>
 
-
 extern "C"
 {
 #include "../deps/cudd/config.h"
@@ -21,7 +20,6 @@ extern "C"
 
 using namespace fastLEC;
 
-
 /**
  * Print a dd summary using BDD wrapper
  * pr = 0 : prints nothing
@@ -31,7 +29,10 @@ using namespace fastLEC;
  * pr > 3 : prints counts + disjoint sum of product + list of nodes
  * @param the BDD node
  */
-void print_dd(std::shared_ptr<fastLEC::CuddManager> manager, const class fastLEC::BDD& bdd, int n, int pr)
+void print_dd(std::shared_ptr<fastLEC::CuddManager> manager,
+              const class fastLEC::CuddBDD &bdd,
+              int n,
+              int pr)
 {
     BDDUtils::printDD(manager, bdd, n, pr);
 }
@@ -40,12 +41,15 @@ void print_dd(std::shared_ptr<fastLEC::CuddManager> manager, const class fastLEC
  * Writes a dot file representing the argument BDDs
  * @param the BDD object
  */
-void write_dd(std::shared_ptr<fastLEC::CuddManager> manager, const class fastLEC::BDD& bdd, const char* filename)
+void write_dd(std::shared_ptr<fastLEC::CuddManager> manager,
+              const class fastLEC::CuddBDD &bdd,
+              const char *filename)
 {
     BDDUtils::writeDD(manager, bdd, filename);
 }
 
-fastLEC::ret_vals fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag)
+fastLEC::ret_vals
+fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag)
 {
     double start_time = fastLEC::ResMgr::get().get_runtime();
 
@@ -58,15 +62,17 @@ fastLEC::ret_vals fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xa
     try
     {
         // Create CUDD manager with shared_ptr for automatic cleanup
-        auto manager = std::make_shared<CuddManager>(0, 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
-        
+        auto manager = std::make_shared<CuddManager>(
+            0, 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
+
         // Set timeout based on remaining time
-        double remaining_time = fastLEC::Param::get().timeout - fastLEC::ResMgr::get().get_runtime();
+        double remaining_time = fastLEC::Param::get().timeout -
+            fastLEC::ResMgr::get().get_runtime();
         manager->setTimeLimit(remaining_time * 1000);
         manager->resetStartTime();
-        
+
         // Create BDD nodes vector with smart pointer management
-        std::vector<class fastLEC::BDD> nodes(xag->max_var + 1);
+        std::vector<class fastLEC::CuddBDD> nodes(xag->max_var + 1);
         nodes[0] = BDDFactory::createZero(manager);
 
         // Create input variables
@@ -80,31 +86,34 @@ fastLEC::ret_vals fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xa
         bool timeout_detected = false;
         int gate_count = 0;
         const int check_interval = 100; // Check timeout every 100 gates
-        
+
         for (int gid : xag->used_gates)
         {
             // Check timeout more frequently for better accuracy
-            if (gate_count % check_interval == 0) {
+            if (gate_count % check_interval == 0)
+            {
                 double current_time = fastLEC::ResMgr::get().get_runtime();
-                if (current_time > Param::get().timeout) {
+                if (current_time > Param::get().timeout)
+                {
                     timeout_detected = true;
                     break;
                 }
             }
-            
+
             // Also check CUDD internal timeout (as backup)
-            if (manager->hasTimeout() || manager->hasTermination()) {
+            if (manager->hasTimeout() || manager->hasTermination())
+            {
                 timeout_detected = true;
                 break;
             }
-            
+
             Gate &g = xag->gates[gid];
 
-            class fastLEC::BDD i1 = nodes[aiger_var(g.inputs[0])];
+            class fastLEC::CuddBDD i1 = nodes[aiger_var(g.inputs[0])];
             if (aiger_sign(g.inputs[0]))
                 i1 = !i1;
 
-            class fastLEC::BDD i2 = nodes[aiger_var(g.inputs[1])];
+            class fastLEC::CuddBDD i2 = nodes[aiger_var(g.inputs[1])];
             if (aiger_sign(g.inputs[1]))
                 i2 = !i2;
 
@@ -116,13 +125,14 @@ fastLEC::ret_vals fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xa
             {
                 nodes[aiger_var(g.output)] = i1 ^ i2;
             }
-            
+
             // Check if the operation resulted in timeout (empty BDD)
-            if (nodes[aiger_var(g.output)].isNull()) {
+            if (nodes[aiger_var(g.output)].isNull())
+            {
                 timeout_detected = true;
                 break;
             }
-            
+
             gate_count++;
         }
 
@@ -130,14 +140,16 @@ fastLEC::ret_vals fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xa
 
         // Final timeout check with precise timing
         double final_time = fastLEC::ResMgr::get().get_runtime();
-        bool final_timeout = timeout_detected || 
-                           (final_time > Param::get().timeout) ||
-                           manager->hasTimeout() || 
-                           manager->hasTermination();
-        
-        if (final_timeout) {
+        bool final_timeout = timeout_detected ||
+            (final_time > Param::get().timeout) || manager->hasTimeout() ||
+            manager->hasTermination();
+
+        if (final_timeout)
+        {
             ret = ret_vals::ret_UNK;
-        } else {
+        }
+        else
+        {
             // Normal result evaluation
             int po_var = aiger_var(xag->PO);
             if (po_var < 0 || po_var > xag->max_var || nodes[po_var].isNull())
@@ -165,23 +177,25 @@ fastLEC::ret_vals fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xa
 
         // Always output statistics, regardless of timeout
         bool timed_out = final_timeout;
-        const char* timeout_status = timed_out ? " (TO)" : "";
-        
-        printf("c [BDD] result = %d, [nodes = %ld, vars = %d, reorderings = %d, memory = %ld bytes] [time = %f]%s \n", 
-            ret, 
-            manager->readNodeCount(), 
-            manager->readSize(),
-            manager->readReorderings(),
-            (long)manager->readMemoryInUse(), 
-            fastLEC::ResMgr::get().get_runtime() - start_time,
-            timeout_status);
+        const char *timeout_status = timed_out ? " (TO)" : "";
+
+        printf("c [BDD] result = %d, [nodes = %ld, vars = %d, reorderings = "
+               "%d, memory = %ld bytes] [time = %f]%s \n",
+               ret,
+               manager->readNodeCount(),
+               manager->readSize(),
+               manager->readReorderings(),
+               (long)manager->readMemoryInUse(),
+               fastLEC::ResMgr::get().get_runtime() - start_time,
+               timeout_status);
         fflush(stdout);
 
         return ret;
     }
-    catch (const std::exception& e)
+    catch (const std::exception &e)
     {
-        // Even on exception, try to output basic statistics if manager is available
+        // Even on exception, try to output basic statistics if manager is
+        // available
         printf("c [BDD] Error: %s, returning UNKNOWN\n", e.what());
         return ret_vals::ret_UNK;
     }

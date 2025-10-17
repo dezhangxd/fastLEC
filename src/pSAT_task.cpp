@@ -137,6 +137,7 @@ std::ostream &fastLEC::operator<<(std::ostream &os, const Task &t)
 
     os << "," << std::right << std::setw(7) << std::fixed
        << std::setprecision(2) << t.runtime() << "s";
+    os.flush();
     return os;
 }
 

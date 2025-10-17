@@ -8,6 +8,18 @@
 
 namespace fastLEC
 {
+
+enum engines
+{
+    engine_seq_SAT,  // sequential SAT solver : kissat
+    engine_seq_ES,   // sequential ES solver
+    engine_seq_BDD,  // sequential BDD solver : CUDD
+    engine_para_SAT, // parallel SAT solver : PartitionSAT
+    engine_para_ES,  // parallel ES solver
+    engine_para_BDD, // parallel BDD solver : Sylvan
+    engine_gpu_ES    // GPU ES solver
+};
+
 // X-Macro defines all modes
 #define MODES_LIST                                                             \
     X(ES)                                                                      \
@@ -21,6 +33,7 @@ namespace fastLEC
     X(ES_sweeping)                                                             \
     X(pES_sweeping)                                                            \
     X(pSAT_sweeping)                                                           \
+    X(hybrid_sweeping)                                                         \
     X(dp2_sweeping)
 
 // User-defined parameters macro with descriptions

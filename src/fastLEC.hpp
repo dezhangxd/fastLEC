@@ -7,6 +7,7 @@
 #include "XAG.hpp" // XAG
 #include "CNF.hpp" // CNF
 #include "basic.hpp"
+#include "parser.hpp"
 #include "sweeper.hpp"
 
 namespace fastLEC
@@ -104,6 +105,10 @@ public:
 
     // sweeping engine for CEC
     fastLEC::ret_vals run_sweeping(std::shared_ptr<fastLEC::Sweeper> sweeper);
+
+    // select engine for CEC
+    fastLEC::engines
+    select_seq_engine_hybridCEC(std::shared_ptr<fastLEC::XAG> xag);
 
     //---------------------------------------------------
     // CEC check

@@ -95,11 +95,10 @@ fastLEC::ret_vals Prover::check_cec()
     FormatManager fm;
     fm.set_aig(aig);
 
-    if (Param::get().mode == Mode::BDD || Param::get().mode == Mode::ES ||
-        Param::get().mode == Mode::pES || Param::get().mode == Mode::gpuES ||
-        Param::get().mode == Mode::pBDD ||
-        Param::get().mode == Mode::SAT_sweeping ||
-        Param::get().mode == Mode::pSAT_sweeping)
+    if (Param::get().mode == Mode::ES || Param::get().mode == Mode::pES ||
+        Param::get().mode == Mode::gpuES || // all the ES modes
+        Param::get().mode == Mode::BDD || Param::get().mode == Mode::pBDD ||
+        Param::get().mode >= Mode::SAT_sweeping) // all the sweeping modes
     {
         bool b_res = fm.aig_to_xag();
         if (!b_res)
@@ -420,15 +419,44 @@ Prover::run_sweeping(std::shared_ptr<fastLEC::Sweeper> sweeper)
             fflush(stdout);
         }
 
+        switch (Param::get().mode)
+        {
+        case Mode::hybrid_sweeping:
+        {
+            auto eng = select_seq_engine_hybridCEC(sub_graph);
+            printf("c [Prover] Selected engine: %s for hybrid sweeping\n",
+                   eng == fastLEC::engines::engine_seq_ES ? "ES" : "SAT");
+            if (eng == fastLEC::engines::engine_seq_ES)
+                ret = seq_ES(sub_graph);
+            else if (eng == fastLEC::engines::engine_seq_SAT)
+                ret = seq_SAT_kissat(sub_graph->construct_cnf_from_this_xag());
+            else
+                ret = ret_vals::ret_UNK;
+            break;
+        }
+        case Mode::SAT_sweeping:
+        {
+            std::shared_ptr<fastLEC::CNF> cnf =
+                sub_graph->construct_cnf_from_this_xag();
+            ret = seq_SAT_kissat(cnf);
+            break;
+        }
+        case Mode::pSAT_sweeping:
+        {
+            std::shared_ptr<fastLEC::CNF> cnf =
+                sub_graph->construct_cnf_from_this_xag();
+            ret = para_SAT_pSAT(sub_graph, Param::get().n_threads);
+            break;
+        }
+        default:
+            fprintf(stderr, "c [Prover] Error: Invalid mode\n");
+            return ret_vals::ret_UNK;
+            break;
+        }
+
         // ret = fast_aig_check(sub_graph->construct_aig_from_this_xag());
         // if(ret != ret_vals::ret_UNK)
         //     continue;
-
-        // std::shared_ptr<fastLEC::CNF> cnf =
-        //     sub_graph->construct_cnf_from_this_xag();
-
-        // ret = this->seq_SAT_kissat(cnf);
-        ret = this->para_SAT_pSAT(sub_graph, Param::get().n_threads);
 
         sweeper->post_proof(ret);
 

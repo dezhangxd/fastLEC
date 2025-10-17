@@ -96,7 +96,8 @@ public:
     //---------------------------------------------------
     // related to scores
     //---------------------------------------------------
-    void compute_XOR_block();
+    void compute_XOR_blocks(std::vector<std::vector<int>> &XOR_blocks,
+                            std::vector<int> &XOR_block_indices);
     void compute_XOR_chains(const std::vector<bool> &mask, // used nodes
                             std::vector<std::vector<int>> &XOR_chains,
                             std::vector<std::vector<int>> &important_nodes);

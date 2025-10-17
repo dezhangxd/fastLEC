@@ -1055,6 +1055,105 @@ void fastLEC::XAG::compute_v_usr()
     }
 }
 
+void fastLEC::XAG::compute_XOR_blocks(std::vector<std::vector<int>> &XOR_blocks,
+                                      std::vector<int> &XOR_block_indices)
+{
+    if (fastLEC::Param::get().verbose > 3)
+    {
+        printf("c [netlist] finding XOR chains\n");
+        int cnt = 0;
+        int ands = 0;
+        for (auto &gate : this->gates)
+            if (gate.type == GateType::XOR2)
+                ++cnt;
+            else
+                ++ands;
+        printf("c [netlist] found %d XOR gates and %d AND gates\n", cnt, ands);
+    }
+
+    std::vector<int> parent(this->max_var + 1);
+    for (int i = 0; i <= this->max_var; ++i)
+        parent[i] = i;
+
+    std::function<int(int)> find = [&](int x) -> int
+    {
+        if (parent[x] != x)
+            parent[x] = find(parent[x]);
+        return parent[x];
+    };
+
+    auto unionSets = [&](int x, int y) -> void
+    {
+        int rootX = find(x);
+        int rootY = find(y);
+        if (rootX != rootY)
+            parent[rootX] = rootY;
+    };
+
+    for (const auto &gate : this->gates)
+    {
+        if (gate.type == GateType::XOR2)
+        {
+            int o_v = aiger_var(gate.output);
+            int i0_v = aiger_var(gate.inputs[0]);
+            int i1_v = aiger_var(gate.inputs[1]);
+            if (this->gates[i0_v].type != GateType::XOR2 ||
+                this->gates[i1_v].type != GateType::XOR2)
+                continue;
+            unionSets(o_v, i0_v);
+            unionSets(o_v, i1_v);
+        }
+    }
+
+    XOR_blocks.clear();
+    XOR_blocks.resize(this->max_var + 1, std::vector<int>());
+    XOR_block_indices.resize(this->max_var + 1, -1);
+
+    for (int i = 0; i <= this->max_var; ++i)
+    {
+        int groupId = find(i);
+        if (XOR_block_indices[groupId] == -1)
+        {
+            XOR_block_indices[groupId] = XOR_blocks.size();
+            XOR_blocks.emplace_back();
+        }
+        XOR_blocks[XOR_block_indices[groupId]].push_back(i);
+    }
+
+    int j = 0;
+    for (int i = 0; i < (int)XOR_blocks.size(); ++i)
+    {
+        if (XOR_blocks[i].size() == 0)
+            continue;
+        else if (XOR_blocks[i].size() == 1)
+        {
+            XOR_block_indices[XOR_blocks[i][0]] =
+                -1; // -2 means it is a single variable
+            continue;
+        }
+        XOR_blocks[j] = XOR_blocks[i];
+        for (unsigned id = 0; id < XOR_blocks[j].size(); ++id)
+        {
+            int v = XOR_blocks[j][id];
+            XOR_blocks[j][id] = aiger_pos_lit(v);
+            XOR_block_indices[v] = j;
+        }
+        j++;
+    }
+    XOR_blocks.resize(j);
+
+    if (fastLEC::Param::get().verbose > 3)
+    {
+        for (int i = 0; i < (int)XOR_blocks.size(); ++i)
+        {
+            printf("XOR block %d [sz = %d]: ", i, (int)XOR_blocks[i].size());
+            for (int v : XOR_blocks[i])
+                printf("%d ", v);
+            puts("");
+        }
+    }
+}
+
 void fastLEC::XAG::compute_XOR_chains(
     const std::vector<bool> &mask,
     std::vector<std::vector<int>> &XOR_chains,
