@@ -97,7 +97,7 @@ void fastLEC::PartitionSAT::compute_scores(const std::vector<bool> &mask,
         }
     }
 
-    int prop_lev = 3;
+    int prop_lev = 2;
     double beta = 10.0;
     for (int i = 0; i < prop_lev; i++)
     {

@@ -72,7 +72,7 @@ fastLEC::Task::Task()
 
 double fastLEC::Task::runtime() const
 {
-    if (stop_time > 0.0)
+    if (is_solved())
         return stop_time - start_time;
     else if (start_time > 0.0)
         return fastLEC::ResMgr::get().get_runtime() - start_time;

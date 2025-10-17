@@ -742,7 +742,7 @@ fastLEC::PartitionSAT::pick_split_vars(std::shared_ptr<fastLEC::Task> father)
                   return scores[x] > scores[y];
               });
 
-    int num_swaps = candidates_vars.size() * 0.3;
+    int num_swaps = candidates_vars.size() * 0.1;
     for (int i = 0; i < num_swaps; ++i)
     {
         int pos = fastLEC::ResMgr::get().random_uint64() %
