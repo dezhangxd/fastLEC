@@ -573,9 +573,6 @@ std::shared_ptr<fastLEC::XAG> XAG::extract_sub_graph(std::vector<int> vec_po)
     {
         Gate &g = tmp_gates[i];
 
-        if (mp[g.inputs[0]] == 0 || mp[g.inputs[1]] == 0)
-            continue;
-
         unsigned i0 = mp[g.inputs[0]];
         unsigned i1 = mp[g.inputs[1]];
 
