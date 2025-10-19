@@ -108,7 +108,7 @@ public:
 
     // select engine for CEC
     fastLEC::engines
-    select_seq_engine_hybridCEC(std::shared_ptr<fastLEC::XAG> xag);
+    select_one_engine_hybridCEC(std::shared_ptr<fastLEC::XAG> xag);
 
     //---------------------------------------------------
     // CEC check

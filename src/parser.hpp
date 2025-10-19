@@ -34,6 +34,7 @@ enum engines
     X(pES_sweeping)                                                            \
     X(pSAT_sweeping)                                                           \
     X(hybrid_sweeping)                                                         \
+    X(p_hybrid_sweeping)                                                       \
     X(dp2_sweeping)
 
 // User-defined parameters macro with descriptions

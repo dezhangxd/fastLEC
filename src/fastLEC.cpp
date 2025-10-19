@@ -423,13 +423,26 @@ Prover::run_sweeping(std::shared_ptr<fastLEC::Sweeper> sweeper)
         {
         case Mode::hybrid_sweeping:
         {
-            auto eng = select_seq_engine_hybridCEC(sub_graph);
+            auto eng = select_one_engine_hybridCEC(sub_graph);
             printf("c [Prover] Selected engine: %s for hybrid sweeping\n",
                    eng == fastLEC::engines::engine_seq_ES ? "ES" : "SAT");
             if (eng == fastLEC::engines::engine_seq_ES)
                 ret = seq_ES(sub_graph);
             else if (eng == fastLEC::engines::engine_seq_SAT)
                 ret = seq_SAT_kissat(sub_graph->construct_cnf_from_this_xag());
+            else
+                ret = ret_vals::ret_UNK;
+            break;
+        }
+        case Mode::p_hybrid_sweeping:
+        {
+            auto eng = select_one_engine_hybridCEC(sub_graph);
+            printf("c [Prover] Selected engine: %s for p-hybrid sweeping\n",
+                   eng == fastLEC::engines::engine_seq_ES ? "pES" : "pSAT");
+            if (eng == fastLEC::engines::engine_seq_ES)
+                ret = para_ES(sub_graph, Param::get().n_threads);
+            else if (eng == fastLEC::engines::engine_seq_SAT)
+                ret = para_SAT_pSAT(sub_graph, Param::get().n_threads);
             else
                 ret = ret_vals::ret_UNK;
             break;

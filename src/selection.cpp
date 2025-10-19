@@ -1,7 +1,7 @@
 #include "fastLEC.hpp"
 
 fastLEC::engines
-fastLEC::Prover::select_seq_engine_hybridCEC(std::shared_ptr<fastLEC::XAG> xag)
+fastLEC::Prover::select_one_engine_hybridCEC(std::shared_ptr<fastLEC::XAG> xag)
 {
     std::vector<int> bucket(xag->PI.size() + 1, 0);
 
