@@ -16,6 +16,10 @@ elif [ "$1" = "debug" ]; then
     echo "=== debug ==="
     cmake -DUSE_CUDA=OFF -DCMAKE_BUILD_TYPE=Debug ..
     make -j
+elif [ "$1" = "sanitize" ]; then
+    echo "=== sanitize ==="
+    cmake -DUSE_CUDA=OFF -DCMAKE_BUILD_TYPE=Sanitize ..
+    make -j
 else
     echo "=== no cuda ==="
     cmake -DUSE_CUDA=OFF ..

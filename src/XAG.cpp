@@ -580,7 +580,8 @@ std::shared_ptr<fastLEC::XAG> XAG::extract_sub_graph(std::vector<int> vec_po)
         if (g.type == GateType::AND2)
         {
             if (i0 == (i1 ^ 1))
-                mp[g.output] = 0, mp[g.output ^ 1] = 1;
+                mp[g.output] = 0, mp[g.output ^ 1] = 1,
+                use_flag[aiger_var(g.output)] = true;
             else if (i0 == i1)
                 mp[g.output] = mp[i0], mp[g.output ^ 1] = mp[i0 ^ 1];
             else if (i0 == 0 || i0 == 0)
@@ -595,9 +596,11 @@ std::shared_ptr<fastLEC::XAG> XAG::extract_sub_graph(std::vector<int> vec_po)
         else if (g.type == GateType::XOR2)
         {
             if (i0 == (i1 ^ 1))
-                mp[g.output] = 1, mp[g.output ^ 1] = 0;
+                mp[g.output] = 1, mp[g.output ^ 1] = 0,
+                use_flag[aiger_var(g.output)] = true;
             else if (i0 == i1)
-                mp[g.output] = 0, mp[g.output ^ 1] = 1;
+                mp[g.output] = 0, mp[g.output ^ 1] = 1,
+                use_flag[aiger_var(g.output)] = true;
             else if (i0 == 0)
                 mp[g.output] = mp[i1], mp[g.output ^ 1] = mp[i1 ^ 1];
             else if (i1 == 0)
@@ -621,6 +624,8 @@ std::shared_ptr<fastLEC::XAG> XAG::extract_sub_graph(std::vector<int> vec_po)
     tmp_gates.resize(j);
     v0 = mp[aiger_pos_lit(v0)] >> 1;
     v1 = mp[aiger_pos_lit(v1)] >> 1;
+
+    // TODO: another cone of influence check should be added here
 
     // ---------------------------------------------------
     // step 3: compact: removing useless variables
@@ -675,6 +680,7 @@ std::shared_ptr<fastLEC::XAG> XAG::extract_sub_graph(std::vector<int> vec_po)
     {
         int l0 = aiger_sign(vec_po[0]) ? aiger_neg_lit(v0) : aiger_pos_lit(v0);
         int l1 = aiger_sign(vec_po[1]) ? aiger_neg_lit(v1) : aiger_pos_lit(v1);
+
         // assert(mp[l0] != mp[l1]); // two cones should be useful
         l0 = mapper[l0], l1 = mapper[l1];
         sub_xag->max_var = mapper_cnt;
@@ -705,6 +711,7 @@ std::shared_ptr<fastLEC::XAG> XAG::extract_sub_graph(std::vector<int> vec_po)
     for (unsigned i = aiger_var(sub_xag->PO); i > sub_xag->PI.size(); i--)
     {
         const Gate &g = sub_xag->gates[i];
+
         int o = g.output;
         int i0 = g.inputs[0];
         int i1 = g.inputs[1];
