@@ -5,11 +5,14 @@
 #include <vector>
 #include <functional>
 #include <random>
+#include <atomic>
 
 // ----------------------------------------------------------------------------
 // basic.hpp
 // This file contains some basic definitions and functions
 // ----------------------------------------------------------------------------
+
+extern std::atomic<bool> global_solved_for_PPE;
 
 namespace fastLEC
 {

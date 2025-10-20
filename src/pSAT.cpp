@@ -448,13 +448,27 @@ void fastLEC::PartitionSAT::timeout_monitor_func()
         if (stop.load())
             break;
 
+        if (global_solved_for_PPE.load())
+        {
+            if (fastLEC::Param::get().verbose > 1)
+            {
+                printf("c [pSAT] PPE solved, terminating all tasks\n");
+                fflush(stdout);
+            }
+
+            terminate_all_tasks();
+            break;
+        }
         if (fastLEC::ResMgr::get().get_runtime() >
             fastLEC::Param::get().timeout)
         {
-            printf("c [pSAT] Timeout reached (%.2fs), terminating all tasks\n",
-                   fastLEC::Param::get().timeout);
-            fflush(stdout);
-
+            if (fastLEC::Param::get().verbose > 1)
+            {
+                printf(
+                    "c [pSAT] Timeout reached (%.2fs), terminating all tasks\n",
+                    fastLEC::Param::get().timeout);
+                fflush(stdout);
+            }
             terminate_all_tasks();
             break;
         }

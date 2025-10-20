@@ -17,6 +17,7 @@ extern "C"
 #include "fastLEC.hpp"
 #include "cudd.hpp"
 #include "parser.hpp"
+#include "basic.hpp"
 
 using namespace fastLEC;
 
@@ -144,7 +145,7 @@ fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag)
             (final_time > Param::get().timeout) || manager->hasTimeout() ||
             manager->hasTermination();
 
-        if (final_timeout)
+        if (final_timeout || global_solved_for_PPE.load())
         {
             ret = ret_vals::ret_UNK;
         }

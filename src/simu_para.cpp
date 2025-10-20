@@ -1,6 +1,7 @@
 #include "fastLEC.hpp"
 #include "simu.hpp"
 #include "parser.hpp"
+#include "basic.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -56,9 +57,10 @@ fastLEC::ret_vals fastLEC::Simulator::run_pbits_pes(unsigned n_t)
                 fflush(stdout);
             }
             if (round % 100 == 0 &&
-                std::chrono::duration_cast<std::chrono::duration<double>>(
-                    std::chrono::high_resolution_clock::now() - st)
-                        .count() > time_resources)
+                (std::chrono::duration_cast<std::chrono::duration<double>>(
+                     std::chrono::high_resolution_clock::now() - st)
+                         .count() > time_resources ||
+                 global_solved_for_PPE.load()))
             {
                 cutted.store(true);
                 return;
@@ -186,9 +188,10 @@ fastLEC::ret_vals fastLEC::Simulator::run_round_pes(unsigned n_t)
                 fflush(stdout);
             }
             if ((round - start_round) % 100 == 0 &&
-                std::chrono::duration_cast<std::chrono::duration<double>>(
-                    std::chrono::high_resolution_clock::now() - st)
-                        .count() > time_resources)
+                (std::chrono::duration_cast<std::chrono::duration<double>>(
+                     std::chrono::high_resolution_clock::now() - st)
+                         .count() > time_resources ||
+                 global_solved_for_PPE.load()))
             {
                 cutted.store(true);
                 return;

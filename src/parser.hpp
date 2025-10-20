@@ -17,7 +17,8 @@ enum engines
     engine_para_SAT, // parallel SAT solver : PartitionSAT
     engine_para_ES,  // parallel ES solver
     engine_para_BDD, // parallel BDD solver : Sylvan
-    engine_gpu_ES    // GPU ES solver
+    engine_gpu_ES,   // GPU ES solver
+    engine_portfolio // portfolio engine
 };
 
 // X-Macro defines all modes
@@ -35,7 +36,7 @@ enum engines
     X(pSAT_sweeping)                                                           \
     X(hybrid_sweeping)                                                         \
     X(p_hybrid_sweeping)                                                       \
-    X(dp2_sweeping)
+    X(PPE_sweeping) // parallel portfolio engine sweeping
 
 // User-defined parameters macro with descriptions
 #define USER_PARAMS                                                            \
