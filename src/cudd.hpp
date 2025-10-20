@@ -5,6 +5,7 @@
 #include <cstring>
 #include <cstdio>
 #include <sys/stat.h>
+#include <atomic>
 
 extern "C"
 {
@@ -14,6 +15,13 @@ extern "C"
 
 namespace fastLEC
 {
+
+// Forward declaration for hook function
+extern std::atomic<bool> global_solved_for_PPE;
+
+// CUDD hook function to check global termination flag
+extern "C" int mycheckhook(DdManager *dd, const char *where, void *f);
+
 /**
  * RAII wrapper for CUDD DdManager
  * Automatically manages the lifecycle of DdManager
@@ -110,6 +118,21 @@ public:
     bool hasTermination() { return readErrorCode() == CUDD_TERMINATION; }
     bool hasTooManyNodes() { return readErrorCode() == CUDD_TOO_MANY_NODES; }
 
+    // Hook management for global termination checking
+    void addGlobalTerminationHook()
+    {
+        // Add hook to check global termination flag during CUDD operations
+        Cudd_AddHook(manager_, mycheckhook, CUDD_PRE_REORDERING_HOOK);
+        Cudd_AddHook(manager_, mycheckhook, CUDD_PRE_GC_HOOK);
+    }
+
+    void removeGlobalTerminationHook()
+    {
+        // Remove the hook
+        Cudd_RemoveHook(manager_, mycheckhook, CUDD_PRE_REORDERING_HOOK);
+        Cudd_RemoveHook(manager_, mycheckhook, CUDD_PRE_GC_HOOK);
+    }
+
     void printDebug(DdNode *dd, int n, int pr)
     {
         Cudd_PrintDebug(manager_, dd, n, pr);
@@ -147,7 +170,7 @@ private:
     };
 
 public:
-CuddBDD() : node_(nullptr), manager_(nullptr) {}
+    CuddBDD() : node_(nullptr), manager_(nullptr) {}
 
     CuddBDD(DdNode *node, std::shared_ptr<CuddManager> manager)
         : node_(node), manager_(manager)
@@ -168,7 +191,8 @@ CuddBDD() : node_(nullptr), manager_(nullptr) {}
     }
 
     // Move constructor
-    CuddBDD(CuddBDD &&other) noexcept : node_(other.node_), manager_(other.manager_)
+    CuddBDD(CuddBDD &&other) noexcept
+        : node_(other.node_), manager_(other.manager_)
     {
         other.node_ = nullptr;
         other.manager_ = nullptr;
@@ -236,6 +260,7 @@ CuddBDD() : node_(nullptr), manager_(nullptr) {}
         {
             throw std::runtime_error("BDD operations require same manager");
         }
+
         DdNode *result = manager_->bddAnd(node_, other.node_);
         if (result == nullptr)
         {
@@ -259,6 +284,7 @@ CuddBDD() : node_(nullptr), manager_(nullptr) {}
         {
             throw std::runtime_error("BDD operations require same manager");
         }
+
         DdNode *result = manager_->bddXor(node_, other.node_);
         if (result == nullptr)
         {
@@ -305,6 +331,7 @@ CuddBDD() : node_(nullptr), manager_(nullptr) {}
         {
             throw std::runtime_error("BDD operations require manager");
         }
+
         DdNode *result = manager_->bddNot(node_);
         if (result == nullptr)
         {
@@ -380,8 +407,10 @@ public:
 class BDDUtils
 {
 public:
-    static void
-    printDD(std::shared_ptr<CuddManager> manager, const CuddBDD &bdd, int n, int pr)
+    static void printDD(std::shared_ptr<CuddManager> manager,
+                        const CuddBDD &bdd,
+                        int n,
+                        int pr)
     {
         printf("DdManager nodes: %ld | ", manager->readNodeCount());
         printf("DdManager vars: %d | ", manager->readSize());

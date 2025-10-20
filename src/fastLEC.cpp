@@ -455,11 +455,11 @@ fastLEC::Prover::para_portfolios(std::shared_ptr<fastLEC::XAG> xag, int n_t)
         {
             if (n_threads_BDD > 0)
             {
-                printf("c enter BDD\n");
-                fflush(stdout);
+                // printf("c enter BDD\n");
+                // fflush(stdout);
                 ret_BDD = seq_BDD_cudd(xag);
-                printf("c exit BDD\n");
-                fflush(stdout);
+                // printf("c exit BDD\n");
+                // fflush(stdout);
                 if (ret_BDD != ret_vals::ret_UNK)
                     global_solved_for_PPE.store(true);
             }

@@ -5,7 +5,10 @@
 
 using namespace fastLEC;
 
+namespace fastLEC
+{
 std::atomic<bool> global_solved_for_PPE(false);
+}
 
 ResMgr &ResMgr::get()
 {

@@ -22,6 +22,27 @@ extern "C"
 using namespace fastLEC;
 
 /**
+ * CUDD hook function to check global termination flag
+ * This function is called by CUDD during various operations
+ * Returns 1 to terminate the operation, 0 to continue
+ */
+extern "C" int mycheckhook(DdManager *dd, const char *where, void *f)
+{
+    // Suppress unused parameter warnings
+    (void)dd;
+    (void)where;
+    (void)f;
+
+    // Check global termination flag
+    if (global_solved_for_PPE.load())
+    {
+        // Return 1 to terminate the operation
+        return 1;
+    }
+    return 0; // Continue the operation
+}
+
+/**
  * Print a dd summary using BDD wrapper
  * pr = 0 : prints nothing
  * pr = 1 : prints counts of nodes and minterms
@@ -66,11 +87,13 @@ fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag)
         auto manager = std::make_shared<CuddManager>(
             0, 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
 
-        // Set timeout based on remaining time
-        double remaining_time = fastLEC::Param::get().timeout -
-            fastLEC::ResMgr::get().get_runtime();
-        manager->setTimeLimit(remaining_time * 1000);
+        // Set a very short timeout to force frequent checks (100ms)
+        // This ensures CUDD checks for termination more frequently
+        manager->setTimeLimit(100);
         manager->resetStartTime();
+
+        // Add global termination hook for immediate response
+        manager->addGlobalTerminationHook();
 
         // Create BDD nodes vector with smart pointer management
         std::vector<class fastLEC::CuddBDD> nodes(xag->max_var + 1);
@@ -83,14 +106,15 @@ fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag)
             nodes[ivar] = BDDFactory::createVar(manager);
         }
 
-        // Process gates with precise external timeout checking
+        // Process gates with hook-based termination checking
         bool timeout_detected = false;
         int gate_count = 0;
-        const int check_interval = 100; // Check timeout every 100 gates
+        const int check_interval =
+            3; // Check every 3 gates (hooks handle most checks)
 
         for (int gid : xag->used_gates)
         {
-            // Check timeout more frequently for better accuracy
+            // Periodic timeout check (hooks handle most termination checks)
             if (gate_count % check_interval == 0)
             {
                 double current_time = fastLEC::ResMgr::get().get_runtime();
@@ -99,9 +123,12 @@ fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag)
                     timeout_detected = true;
                     break;
                 }
+
+                // Reset CUDD timeout to force frequent internal checks
+                manager->resetStartTime();
             }
 
-            // Also check CUDD internal timeout (as backup)
+            // Check CUDD internal timeout/termination (set by hooks)
             if (manager->hasTimeout() || manager->hasTermination())
             {
                 timeout_detected = true;
@@ -175,6 +202,9 @@ fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag)
                 }
             }
         }
+
+        // Clean up the hook
+        manager->removeGlobalTerminationHook();
 
         // Always output statistics, regardless of timeout
         bool timed_out = final_timeout;
