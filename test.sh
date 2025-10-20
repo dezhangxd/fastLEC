@@ -2,7 +2,7 @@ clear;
 clear;
 
 # ./clean.sh
-./build.sh debug
+./build.sh
 
 BUILD_DIR="build"
 
@@ -16,8 +16,8 @@ command="-m hybrid_sweeping -c 16 -v 2 -t 500"
 # command="-m pBDD -c 4 -v 2 -t 5 "
 
 # rm -rf *.aig
-# ./${BUILD_DIR}/bin/fastLEC -i ../ins/all/test_11_TOP4.aiger $command |gnomon
-./${BUILD_DIR}/bin/fastLEC -i ../ins/all/test_14_TOP30.aiger $command |gnomon
+./${BUILD_DIR}/bin/fastLEC -i ../ins/all/test_11_TOP4.aiger $command |gnomon
+# ./${BUILD_DIR}/bin/fastLEC -i ../ins/all/test_30_TOP16.aiger $command |gnomon
 # ./${BUILD_DIR}/bin/fastLEC -i ../ins/all/test_16_TOP11.aiger $command |gnomon
 
 # ./${BUILD_DIR}/bin/fastLEC -i ../ins/miter_right/bit5/mul5o5.aig $command |gnomon
