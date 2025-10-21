@@ -130,7 +130,6 @@ void fastLEC::ISimulator::init_glob_ES(fastLEC::XAG &xag)
             unsigned not_rhs0 = aiger_not(rhs0);
             unsigned not_rhs1 = aiger_not(rhs1);
             unsigned out = gate.output;
-
             // Process rhs0
             if (mem_addr[rhs0] == NOT_ALLOC)
             {

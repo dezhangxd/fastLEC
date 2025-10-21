@@ -47,9 +47,11 @@ std::ostream &operator<<(std::ostream &os, const fastLEC::Gate &gate)
 
         os << std::setw(8) << aiger_var(gate.output);
         os << " <v- ";
-        os << std::setw(8) << aiger_var(gate.inputs[0]);
+        os << std::setw(8) << (aiger_sign(gate.inputs[0]) ? "-" : " ")
+           << aiger_var(gate.inputs[0]);
         os << (gate.type == GateType::AND2 ? " & " : " ^ ");
-        os << std::setw(8) << aiger_var(gate.inputs[1]);
+        os << std::setw(8) << (aiger_sign(gate.inputs[1]) ? "-" : " ")
+           << aiger_var(aiger_not(gate.inputs[1]));
     }
     else
     {
@@ -522,9 +524,9 @@ std::shared_ptr<fastLEC::XAG> XAG::extract_sub_graph(std::vector<int> vec_po)
     };
 
     // ---------------------------------------------------
-    // step1: extract the cones
+    // step1.1: extract the cones
     // ---------------------------------------------------
-    std::vector<bool> refs(this->max_var + 1, false);
+    std::vector<bool> refs(this->max_var + 2, false);
     int v0 = 0, v1 = 0;
     int pos = -1;
     for (unsigned i = 0; i < vec_po.size(); i++)
@@ -562,79 +564,136 @@ std::shared_ptr<fastLEC::XAG> XAG::extract_sub_graph(std::vector<int> vec_po)
     std::reverse(tmp_gates.begin(), tmp_gates.end());
 
     // ---------------------------------------------------
+    // step 1.2: add PO gate
+    // ---------------------------------------------------
+    int PO_lit = 0;
+    if (vec_po.size() == 2)
+    {
+        PO_lit = aiger_pos_lit(this->max_var + 1);
+        int l0 = aiger_sign(vec_po[0]) ? aiger_neg_lit(v0) : aiger_pos_lit(v0);
+        int l1 = aiger_sign(vec_po[1]) ? aiger_neg_lit(v1) : aiger_pos_lit(v1);
+        tmp_gates.emplace_back(Gate(PO_lit, GateType::XOR2, l0, l1));
+    }
+    else if (vec_po.size() == 1)
+    {
+        if (v0 == 0 || v0 == 1) // constant
+            PO_lit = v0;
+        else // variables
+            PO_lit =
+                aiger_sign(vec_po[0]) ? aiger_neg_lit(v0) : aiger_pos_lit(v0);
+    }
+    else
+    {
+        printf("Error: vec_po.size() == %zu\n", vec_po.size());
+        exit(1);
+    }
+
+    // ---------------------------------------------------
     // step 2: reduce const 0 1 variables
     // ---------------------------------------------------
-    std::vector<int> mp(2 * (this->max_var + 1), 0);
+    std::vector<int> mp(2 * (this->max_var + 2), 0);
     for (unsigned i = 0; i < mp.size(); i++)
         mp[i] = i;
-    std::vector<bool> use_flag(this->max_var + 1, false);
+    std::vector<bool> use_flag(this->max_var + 2, false);
+    std::function<int(int)> get_mp = [&](int l) -> int
+    {
+        if (mp[l] != l)
+        {
+            use_flag[aiger_var(l)] = false;
+            mp[l] = get_mp(mp[l]);
+        }
+        use_flag[aiger_var(l)] = true;
+        return mp[l];
+    };
     unsigned i = 0, j = 0;
     for (; i < tmp_gates.size(); i++)
     {
         Gate &g = tmp_gates[i];
 
-        unsigned i0 = mp[g.inputs[0]];
-        unsigned i1 = mp[g.inputs[1]];
+        unsigned i0 = get_mp(g.inputs[0]);
+        unsigned i1 = get_mp(g.inputs[1]);
 
         bool keep = false;
         if (g.type == GateType::AND2)
         {
             if (i0 == (i1 ^ 1))
-                mp[g.output] = 0, mp[g.output ^ 1] = 1,
-                use_flag[aiger_var(g.output)] = true;
+                mp[g.output] = 0, mp[g.output ^ 1] = 1;
             else if (i0 == i1)
-                mp[g.output] = mp[i0], mp[g.output ^ 1] = mp[i0 ^ 1];
-            else if (i0 == 0 || i0 == 0)
+                mp[g.output] = get_mp(i0), mp[g.output ^ 1] = get_mp(i0 ^ 1),
+                use_flag[aiger_var(g.output)] = true;
+            else if (i0 == 0 || i1 == 0)
                 mp[g.output] = 0, mp[g.output ^ 1] = 1;
             else if (i0 == 1)
-                mp[g.output] = mp[i1], mp[g.output ^ 1] = mp[i1 ^ 1];
+                mp[g.output] = get_mp(i1), mp[g.output ^ 1] = get_mp(i1 ^ 1);
             else if (i1 == 1)
-                mp[g.output] = mp[i0], mp[g.output ^ 1] = mp[i0 ^ 1];
+                mp[g.output] = get_mp(i0), mp[g.output ^ 1] = get_mp(i0 ^ 1);
             else
                 keep = true;
         }
         else if (g.type == GateType::XOR2)
         {
             if (i0 == (i1 ^ 1))
-                mp[g.output] = 1, mp[g.output ^ 1] = 0,
-                use_flag[aiger_var(g.output)] = true;
+                mp[g.output] = 1, mp[g.output ^ 1] = 0;
             else if (i0 == i1)
-                mp[g.output] = 0, mp[g.output ^ 1] = 1,
-                use_flag[aiger_var(g.output)] = true;
+                mp[g.output] = 0, mp[g.output ^ 1] = 1;
             else if (i0 == 0)
-                mp[g.output] = mp[i1], mp[g.output ^ 1] = mp[i1 ^ 1];
+                mp[g.output] = get_mp(i1), mp[g.output ^ 1] = get_mp(i1 ^ 1),
+                use_flag[aiger_var(g.output)] = true;
             else if (i1 == 0)
-                mp[g.output] = mp[i0], mp[g.output ^ 1] = mp[i0 ^ 1];
+                mp[g.output] = get_mp(i0), mp[g.output ^ 1] = get_mp(i0 ^ 1),
+                use_flag[aiger_var(g.output)] = true;
             else if (i0 == 1)
-                mp[g.output] = mp[i1 ^ 1], mp[g.output ^ 1] = mp[i1];
+                mp[g.output] = get_mp(i1 ^ 1), mp[g.output ^ 1] = get_mp(i1),
+                use_flag[aiger_var(g.output)] = true;
             else if (i1 == 1)
-                mp[g.output] = mp[i0 ^ 1], mp[g.output ^ 1] = mp[i0];
+                mp[g.output] = get_mp(i0 ^ 1), mp[g.output ^ 1] = get_mp(i0),
+                use_flag[aiger_var(g.output)] = true;
             else
                 keep = true;
         }
 
         if (keep)
         {
-            tmp_gates[j++] = g;
-            use_flag[aiger_var(i0)] = true;
-            use_flag[aiger_var(i1)] = true;
-            use_flag[aiger_var(g.output)] = true;
+            tmp_gates[j++] = Gate(
+                g.output, g.type, get_mp(g.inputs[0]), get_mp(g.inputs[1]));
         }
     }
     tmp_gates.resize(j);
-    v0 = mp[aiger_pos_lit(v0)] >> 1;
-    v1 = mp[aiger_pos_lit(v1)] >> 1;
+    v0 = get_mp(aiger_pos_lit(v0)) >> 1;
+    v1 = get_mp(aiger_pos_lit(v1)) >> 1;
+    PO_lit = get_mp(PO_lit);
 
-    // TODO: another cone of influence check should be added here
+    // ---------------------------------------------------
+    // 2.3 Another cone of influence check
+    // ---------------------------------------------------
+    use_flag.clear();
+    use_flag.resize(this->max_var + 2, false);
+    use_flag[aiger_var(PO_lit)] = true;
+
+    for (int i = (int)tmp_gates.size() - 1; i >= 0; i--)
+    {
+        Gate &g = tmp_gates[i];
+        if (use_flag[aiger_var(g.output)])
+        {
+            use_flag[aiger_var(g.inputs[0])] = true;
+            use_flag[aiger_var(g.inputs[1])] = true;
+        }
+    }
+
+    j = 0;
+    for (unsigned i = 0; i < tmp_gates.size(); i++)
+        if (use_flag[aiger_var(tmp_gates[i].output)])
+            tmp_gates[j++] = tmp_gates[i];
+    tmp_gates.resize(j);
 
     // ---------------------------------------------------
     // step 3: compact: removing useless variables
     // ---------------------------------------------------
     int mapper_cnt = 1; // variable counter
     // literal mapper, reordering the literals
-    std::vector<int> mapper(2 * (this->max_var + 1), -1);
+    std::vector<int> mapper(2 * (this->max_var + 2), -1);
     mapper[0] = 0, mapper[1] = 1;
-    for (int v = 1; v <= this->max_var; v++)
+    for (int v = 1; v <= this->max_var + 1; v++)
     {
         if (use_flag[v])
         {
@@ -675,32 +734,7 @@ std::shared_ptr<fastLEC::XAG> XAG::extract_sub_graph(std::vector<int> vec_po)
         sub_xag->gates[aiger_var(o)] = fastLEC::Gate(o, g.type, i0, i1);
         sub_xag->used_gates.emplace_back(aiger_var(o));
     }
-
-    if (vec_po.size() == 2)
-    {
-        int l0 = aiger_sign(vec_po[0]) ? aiger_neg_lit(v0) : aiger_pos_lit(v0);
-        int l1 = aiger_sign(vec_po[1]) ? aiger_neg_lit(v1) : aiger_pos_lit(v1);
-
-        // assert(mp[l0] != mp[l1]); // two cones should be useful
-        l0 = mapper[l0], l1 = mapper[l1];
-        sub_xag->max_var = mapper_cnt;
-        sub_xag->PO = aiger_pos_lit(mapper_cnt);
-        sub_xag->gates[mapper_cnt] = fastLEC::Gate(sub_xag->PO, XOR2, l0, l1);
-        sub_xag->used_gates.emplace_back(mapper_cnt);
-    }
-    else if (vec_po.size() == 1)
-    {
-        if (v0 == 0 || v0 == 1) // constant
-            sub_xag->PO = v0;
-        else // variables
-            sub_xag->PO = aiger_sign(vec_po[0]) ? mapper[aiger_neg_lit(v0)]
-                                                : mapper[aiger_pos_lit(v0)];
-    }
-    else
-    {
-        printf("Error: vec_po.size() == %zu\n", vec_po.size());
-        exit(1);
-    }
+    sub_xag->PO = mapper[PO_lit];
 
     // ---------------------------------------------------
     // step 5: mark used literals
