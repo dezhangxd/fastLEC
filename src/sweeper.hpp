@@ -42,6 +42,7 @@ public:
     std::shared_ptr<fastLEC::XAG> next_sub_graph();
     void log_next_sub_aiger();
     void log_next_sub_cnfs();
+    void log_next_sub_features();
     // the nodes in the last class are proven to be equivalent or not equivalent
     void post_proof(fastLEC::ret_vals ret);
 };

@@ -49,6 +49,8 @@ public:
 
 class XAG
 {
+    std::shared_ptr<fastLEC::CNF> cnf_backup;
+
 public:
     XAG() = default;
     explicit XAG(const fastLEC::AIG &aig) { construct_from_aig(aig); }
@@ -109,6 +111,9 @@ public:
 
     void compute_cut_points(const std::vector<int> &selected_vars,
                             std::vector<int> &cut_points);
+
+    void compute_simulation_features(std::vector<double> &one_percentages,
+                                     std::vector<double> &entropys);
     //---------------------------------------------------
     // XAG useless variable elimination and remapping
     //---------------------------------------------------
@@ -125,8 +130,11 @@ public:
     //---------------------------------------------------
     void construct_from_aig(const fastLEC::AIG &aig);
 
-    std::unique_ptr<fastLEC::CNF> construct_cnf_from_this_xag();
+    std::shared_ptr<fastLEC::CNF> construct_cnf_from_this_xag();
     std::shared_ptr<fastLEC::AIG> construct_aig_from_this_xag();
+
+    std::vector<std::string> features_names;
+    std::vector<double> generate_features();
 
     std::vector<int> lmap_xag_to_cnf;
     int to_cnf_var(int xag_var);

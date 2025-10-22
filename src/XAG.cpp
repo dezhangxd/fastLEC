@@ -168,9 +168,12 @@ void XAG::construct_from_aig(const fastLEC::AIG &aig)
         std::cout << *this << std::endl;
 }
 
-std::unique_ptr<fastLEC::CNF> XAG::construct_cnf_from_this_xag()
+std::shared_ptr<fastLEC::CNF> XAG::construct_cnf_from_this_xag()
 {
-    std::unique_ptr<fastLEC::CNF> cnf = std::make_unique<fastLEC::CNF>();
+    if (cnf_backup != nullptr)
+        return cnf_backup;
+
+    std::shared_ptr<fastLEC::CNF> cnf = std::make_shared<fastLEC::CNF>();
 
     cnf->num_vars = 0;
     cnf->use_mapper = true;
@@ -279,6 +282,8 @@ std::unique_ptr<fastLEC::CNF> XAG::construct_cnf_from_this_xag()
 
     if (fastLEC::Param::get().verbose > 2)
         std::cout << *cnf << std::endl;
+
+    cnf_backup = std::make_shared<fastLEC::CNF>(*cnf);
 
     return cnf;
 }
@@ -591,10 +596,12 @@ std::shared_ptr<fastLEC::XAG> XAG::extract_sub_graph(std::vector<int> vec_po)
     // ---------------------------------------------------
     // step 2: reduce const 0 1 variables
     // ---------------------------------------------------
-    std::vector<int> mp(2 * (this->max_var + 2), 0);
+    std::vector<int> mp(2 * (this->max_var + 1 + (vec_po.size() == 2 ? 1 : 0)),
+                        0);
     for (unsigned i = 0; i < mp.size(); i++)
         mp[i] = i;
-    std::vector<bool> use_flag(this->max_var + 2, false);
+    std::vector<bool> use_flag(this->max_var + 1 + (vec_po.size() == 2 ? 1 : 0),
+                               false);
     std::function<int(int)> get_mp = [&](int l) -> int
     {
         if (mp[l] != l)
@@ -667,7 +674,7 @@ std::shared_ptr<fastLEC::XAG> XAG::extract_sub_graph(std::vector<int> vec_po)
     // 2.3 Another cone of influence check
     // ---------------------------------------------------
     use_flag.clear();
-    use_flag.resize(this->max_var + 2, false);
+    use_flag.resize(this->max_var + 1 + (vec_po.size() == 2 ? 1 : 0), false);
     use_flag[aiger_var(PO_lit)] = true;
 
     for (int i = (int)tmp_gates.size() - 1; i >= 0; i--)
@@ -689,17 +696,18 @@ std::shared_ptr<fastLEC::XAG> XAG::extract_sub_graph(std::vector<int> vec_po)
     // ---------------------------------------------------
     // step 3: compact: removing useless variables
     // ---------------------------------------------------
-    int mapper_cnt = 1; // variable counter
+    int mapper_cnt = 0; // variable counter
     // literal mapper, reordering the literals
-    std::vector<int> mapper(2 * (this->max_var + 2), -1);
+    std::vector<int> mapper(
+        2 * (this->max_var + 1 + (vec_po.size() == 2 ? 1 : 0)), -1);
     mapper[0] = 0, mapper[1] = 1;
-    for (int v = 1; v <= this->max_var + 1; v++)
+    for (int v = 1; v <= this->max_var + (vec_po.size() == 2 ? 1 : 0); v++)
     {
         if (use_flag[v])
         {
+            mapper_cnt++;
             mapper[aiger_pos_lit(v)] = aiger_pos_lit(mapper_cnt);
             mapper[aiger_neg_lit(v)] = aiger_neg_lit(mapper_cnt);
-            mapper_cnt++;
         }
     }
 
@@ -709,10 +717,10 @@ std::shared_ptr<fastLEC::XAG> XAG::extract_sub_graph(std::vector<int> vec_po)
     std::shared_ptr<fastLEC::XAG> sub_xag = std::make_shared<fastLEC::XAG>();
 
     sub_xag->max_var = mapper_cnt;
-    sub_xag->used_lits.resize(2 * (sub_xag->max_var + 2), false);
+    sub_xag->used_lits.resize(2 * (sub_xag->max_var + 1), false);
     sub_xag->PI.clear();
     sub_xag->used_gates.clear();
-    sub_xag->gates.resize(sub_xag->max_var + 2);
+    sub_xag->gates.resize(sub_xag->max_var + 1);
     for (int l : this->PI)
     {
         int v_i = find_father(aiger_var(l));
@@ -1316,6 +1324,71 @@ void fastLEC::XAG::compute_XOR_chains(
 #endif
 }
 
+void fastLEC::XAG::compute_simulation_features(
+    std::vector<double> &stable_percentages, std::vector<double> &entropys)
+{
+    stable_percentages.clear();
+    stable_percentages.resize(this->max_var + 1, 0.0);
+    entropys.clear();
+    entropys.resize(this->max_var + 1, 0.0);
+
+    unsigned bv_width = (unsigned)Param::get().custom_params.ls_bv_bits;
+    std::vector<BitVector> states(2 * (this->max_var + 1));
+
+    for (unsigned i = 0; i < this->PI.size(); i++)
+    {
+        int lit = this->PI[i];
+        states[lit].resize(1llu << (bv_width - 1));
+        states[lit].random();
+    }
+    for (auto &gate : this->gates)
+    {
+        if (gate.type == fastLEC::GateType::AND2 ||
+            gate.type == fastLEC::GateType::XOR2)
+        {
+            int rhs0 = gate.inputs[0];
+            int rhs1 = gate.inputs[1];
+            if (aiger_sign(rhs0) && states[rhs0].size() == 0)
+                states[rhs0] = ~states[aiger_not(rhs0)];
+            if (aiger_sign(rhs1) && states[rhs1].size() == 0)
+                states[rhs1] = ~states[aiger_not(rhs1)];
+            if (gate.type == fastLEC::GateType::AND2)
+            {
+                states[gate.output] = states[rhs0] & states[rhs1];
+            }
+            else
+            {
+                states[gate.output] = states[rhs0] ^ states[rhs1];
+            }
+            states[aiger_not(gate.output)] = ~states[gate.output];
+        }
+    }
+
+    printf("PO: %d, %d var_size: %d\n",
+           this->PO,
+           aiger_var(this->PO),
+           this->max_var);
+    for (int v = 1; v <= this->max_var; v++)
+    {
+        int l = aiger_pos_lit(v);
+        double percentage =
+            (states[l].num_ones() + 0.0) / (1llu << (bv_width - 1));
+
+        percentage = std::abs(percentage - 0.5) * 2;
+
+        double entropy = -percentage * std::log2(percentage) -
+            (1 - percentage) * std::log2(1 - percentage);
+
+        if (Param::get().verbose > 3)
+        {
+            printf(
+                "v %d: percentage %lf, entropy %lf\n", v, percentage, entropy);
+            fflush(stdout);
+        }
+        stable_percentages[v] = percentage;
+        entropys[v] = entropy;
+    }
+}
 bool fastLEC::XAG::check_XAG()
 {
     // Check max_var

@@ -129,6 +129,9 @@ public:
 
     bool has_one() const;
 
+    uint64_t num_ones();
+    uint64_t num_zeros();
+
     friend std::ostream &operator<<(std::ostream &os,
                                     const fastLEC::BitVector &bv);
 };

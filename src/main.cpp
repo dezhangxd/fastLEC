@@ -11,6 +11,13 @@ int main(int argc, char *argv[])
             return 1;
         }
 
+        if (fastLEC::Param::get().custom_params.log_features ||
+            fastLEC::Param::get().custom_params.log_sub_aiger ||
+            fastLEC::Param::get().custom_params.log_sub_cnfs)
+        {
+            fastLEC::Param::get().mode = fastLEC::Mode::SAT_sweeping;
+        }
+
         fastLEC::Prover prover;
 
         bool ret = prover.read_aiger();
@@ -35,7 +42,8 @@ int main(int argc, char *argv[])
             std::cout << "s Unknown." << std::endl;
         }
 
-        std::cout << "c Runtime: " << fastLEC::ResMgr::get().get_runtime() << " seconds" << std::endl;
+        std::cout << "c Runtime: " << fastLEC::ResMgr::get().get_runtime()
+                  << " seconds" << std::endl;
 
         return 0;
     }

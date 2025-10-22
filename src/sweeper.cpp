@@ -5,6 +5,9 @@
 #include <sstream>
 #include <algorithm>
 #include <string>
+#include <fstream>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 using namespace fastLEC;
 
@@ -313,8 +316,32 @@ std::shared_ptr<fastLEC::XAG> Sweeper::next_sub_graph()
         this->log_next_sub_cnfs();
         this->tmp_next_graph = nullptr;
     }
+    if (sub_xag && Param::get().custom_params.log_features)
+    {
+        this->tmp_next_graph = sub_xag;
+        this->log_next_sub_features();
+        this->tmp_next_graph = nullptr;
+    }
 
     return sub_xag;
+}
+
+void check_dir_and_create(const std::string &file_dir)
+{
+    size_t last_slash = file_dir.find_last_of('/');
+    if (last_slash != std::string::npos)
+    {
+        std::string dir_path = file_dir.substr(0, last_slash);
+#if defined(_WIN32)
+        _mkdir(dir_path.c_str());
+#else
+        struct stat st;
+        if (stat(dir_path.c_str(), &st) != 0)
+        {
+            mkdir(dir_path.c_str(), 0755);
+        }
+#endif
+    }
 }
 
 void Sweeper::log_next_sub_cnfs()
@@ -322,9 +349,11 @@ void Sweeper::log_next_sub_cnfs()
     auto cnf = tmp_next_graph->construct_cnf_from_this_xag();
 
     std::string log_file = Param::get().custom_params.log_dir;
+    check_dir_and_create(log_file);
     log_file += "/" + Param::get().filename;
     log_file += "_" + std::to_string(this->next_class_idx) + ".cnf";
     printf("c [log] log file: %s\n", log_file.c_str());
+    fflush(stdout);
     cnf->log_cnf(log_file);
 }
 
@@ -333,18 +362,39 @@ void Sweeper::log_next_sub_aiger()
     auto aig = tmp_next_graph->construct_aig_from_this_xag();
 
     std::string log_file = Param::get().custom_params.log_dir;
+    check_dir_and_create(log_file);
     log_file += "/" + Param::get().filename;
     log_file += "_" + std::to_string(this->next_class_idx) + ".aig";
     printf("c [log] log file: %s\n", log_file.c_str());
+    fflush(stdout);
 
     aig->log(log_file);
+}
+
+void Sweeper::log_next_sub_features()
+{
+    auto features = tmp_next_graph->generate_features();
+
+    std::string log_file = Param::get().custom_params.log_dir;
+    check_dir_and_create(log_file);
+    log_file += "/" + Param::get().filename;
+    log_file += "_" + std::to_string(this->next_class_idx) + ".txt";
+    printf("c [log] log file: %s\n", log_file.c_str());
+    fflush(stdout);
+
+    std::ofstream out(log_file);
+    for (size_t i = 0; i < features.size(); i++)
+        out << tmp_next_graph->features_names[i] << ": " << features[i]
+            << std::endl;
+    out.close();
 }
 
 void Sweeper::post_proof(fastLEC::ret_vals ret)
 {
     if (ret == ret_vals::ret_UNK &&
         (Param::get().custom_params.log_sub_aiger ||
-         Param::get().custom_params.log_sub_cnfs))
+         Param::get().custom_params.log_sub_cnfs ||
+         Param::get().custom_params.log_features))
         ret = ret_vals::ret_UNS;
 
     unsigned last_id = this->next_class_idx - 1;

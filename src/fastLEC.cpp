@@ -577,7 +577,8 @@ Prover::run_sweeping(std::shared_ptr<fastLEC::Sweeper> sweeper)
 
         if (ret == ret_vals::ret_UNK &&
             !Param::get().custom_params.log_sub_aiger &&
-            !Param::get().custom_params.log_sub_cnfs)
+            !Param::get().custom_params.log_sub_cnfs &&
+            !Param::get().custom_params.log_features)
             break;
     }
 

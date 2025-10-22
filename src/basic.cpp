@@ -294,6 +294,29 @@ bool BitVector::has_one() const
     return false;
 }
 
+uint64_t BitVector::num_ones()
+{
+    return std::accumulate(_array.begin(),
+                           _array.end(),
+                           0ull,
+                           [](uint64_t sum, uint64_t val)
+                           {
+                               return sum + __builtin_popcountll(val);
+                           });
+}
+
+uint64_t BitVector::num_zeros()
+{
+    return std::accumulate(_array.begin(),
+                           _array.end(),
+                           0ull,
+                           [](uint64_t sum, uint64_t val)
+                           {
+                               return sum + unit_width -
+                                   __builtin_popcountll(val);
+                           });
+}
+
 BitVector BitVector::operator^=(const BitVector &rhs)
 {
     for (unsigned i = 0; i < _array.size(); i++)
