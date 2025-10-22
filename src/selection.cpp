@@ -2,7 +2,7 @@
 #include <vector>
 #include <algorithm>
 #include <numeric>
-#include <XAG.hpp>
+#include "XAG.hpp"
 
 fastLEC::engines
 fastLEC::Prover::select_one_engine_hybridCEC(std::shared_ptr<fastLEC::XAG> xag)

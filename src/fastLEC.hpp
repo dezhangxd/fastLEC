@@ -106,6 +106,10 @@ public:
     // sweeping engine for CEC
     fastLEC::ret_vals run_sweeping(std::shared_ptr<fastLEC::Sweeper> sweeper);
 
+    // half sweeping engine for CEC
+    fastLEC::ret_vals run_half_sweeping(std::shared_ptr<fastLEC::XAG> xag,
+                                        int n_threads = 1);
+
     // portfolio engines for CEC
     fastLEC::ret_vals para_portfolios(std::shared_ptr<fastLEC::XAG> xag,
                                       int n_t = 1);
