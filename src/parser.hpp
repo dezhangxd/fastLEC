@@ -31,9 +31,11 @@ enum engines
     X(pSAT)                                                                    \
     X(gpuES)                                                                   \
     X(SAT_sweeping)                                                            \
+    X(BDD_sweeping)                                                            \
     X(ES_sweeping)                                                             \
     X(pES_sweeping)                                                            \
     X(pSAT_sweeping)                                                           \
+    X(pBDD_sweeping)                                                           \
     X(hybrid_sweeping)                                                         \
     X(p_hybrid_sweeping)                                                       \
     X(half_sweeping)                                                           \

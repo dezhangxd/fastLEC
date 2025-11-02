@@ -23,8 +23,9 @@ using namespace fastLEC;
 
 /**
  * CUDD hook function to check global termination flag
- * This function is called by CUDD during various operations
- * Returns 1 to terminate the operation, 0 to continue
+ * This function is called by CUDD during reordering and GC operations
+ * Returns 0 to terminate the operation, non-zero to continue
+ * Note: Hook return value semantics: 0 means stop, non-zero means continue
  */
 extern "C" int mycheckhook(DdManager *dd, const char *where, void *f)
 {
@@ -34,9 +35,31 @@ extern "C" int mycheckhook(DdManager *dd, const char *where, void *f)
     (void)f;
 
     // Check global termination flag
-    if (global_solved_for_PPE.load())
+    if (global_solved_for_PPE.load() ||
+        fastLEC::ResMgr::get().get_runtime() > fastLEC::Param::get().timeout)
     {
-        // Return 1 to terminate the operation
+        // Return 0 to terminate the operation (hook semantics: 0 = stop)
+        return 0;
+    }
+    return 1; // Continue the operation
+}
+
+/**
+ * CUDD termination callback function
+ * This function is called by CUDD during node allocation and other frequent
+ * operations Returns non-zero (true) to terminate the operation, 0 (false) to
+ * continue When this returns true, CUDD will set errorCode to CUDD_TERMINATION
+ */
+extern "C" int myterminationcallback(const void *arg)
+{
+    // Suppress unused parameter warnings
+    (void)arg;
+
+    // Check global termination flag
+    if (global_solved_for_PPE.load() ||
+        fastLEC::ResMgr::get().get_runtime() > fastLEC::Param::get().timeout)
+    {
+        // Return 1 (true) to terminate the operation
         return 1;
     }
     return 0; // Continue the operation
@@ -87,12 +110,11 @@ fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag)
         auto manager = std::make_shared<CuddManager>(
             0, 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
 
-        // Set a very short timeout to force frequent checks (100ms)
-        // This ensures CUDD checks for termination more frequently
-        manager->setTimeLimit(100);
-        manager->resetStartTime();
-
-        // Add global termination hook for immediate response
+        // Add global termination hook and callback for immediate response
+        // Termination callback is checked more frequently (during node
+        // allocation, etc.)
+        manager->registerTerminationCallback();
+        // Hook is checked during reordering and GC
         manager->addGlobalTerminationHook();
 
         // Create BDD nodes vector with smart pointer management
@@ -107,31 +129,16 @@ fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag)
         }
 
         // Process gates with hook-based termination checking
-        bool timeout_detected = false;
         int gate_count = 0;
-        const int check_interval =
-            3; // Check every 3 gates (hooks handle most checks)
+        int total_gates = xag->used_gates.size();
+        bool terminated_by_other = false;
+        bool terminated_by_timeout = false;
 
         for (int gid : xag->used_gates)
         {
-            // Periodic timeout check (hooks handle most termination checks)
-            if (gate_count % check_interval == 0)
+            // Check if CUDD detected termination via hook/callback
+            if (manager->hasTermination())
             {
-                double current_time = fastLEC::ResMgr::get().get_runtime();
-                if (current_time > Param::get().timeout)
-                {
-                    timeout_detected = true;
-                    break;
-                }
-
-                // Reset CUDD timeout to force frequent internal checks
-                manager->resetStartTime();
-            }
-
-            // Check CUDD internal timeout/termination (set by hooks)
-            if (manager->hasTimeout() || manager->hasTermination())
-            {
-                timeout_detected = true;
                 break;
             }
 
@@ -148,32 +155,42 @@ fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag)
             if (g.type == GateType::AND2)
             {
                 nodes[aiger_var(g.output)] = i1 & i2;
+                // Check if operation failed due to termination
+                if (nodes[aiger_var(g.output)].isNull() &&
+                    manager->hasTermination())
+                {
+                    break;
+                }
             }
             else if (g.type == GateType::XOR2)
             {
                 nodes[aiger_var(g.output)] = i1 ^ i2;
+                // Check if operation failed due to termination
+                if (nodes[aiger_var(g.output)].isNull() &&
+                    manager->hasTermination())
+                {
+                    break;
+                }
             }
-
-            // Check if the operation resulted in timeout (empty BDD)
-            if (nodes[aiger_var(g.output)].isNull())
-            {
-                timeout_detected = true;
-                break;
-            }
-
             gate_count++;
         }
 
         ret_vals ret = ret_vals::ret_UNK;
 
-        // Final timeout check with precise timing
+        // Final check: timeout or terminated by other thread
         double final_time = fastLEC::ResMgr::get().get_runtime();
-        bool final_timeout = timeout_detected ||
-            (final_time > Param::get().timeout) || manager->hasTimeout() ||
-            manager->hasTermination();
+        bool actual_timeout = final_time > Param::get().timeout;
 
-        if (final_timeout || global_solved_for_PPE.load())
+        if (manager->hasTermination())
         {
+            if (actual_timeout)
+            {
+                terminated_by_timeout = true;
+            }
+            else if (global_solved_for_PPE.load())
+            {
+                terminated_by_other = true;
+            }
             ret = ret_vals::ret_UNK;
         }
         else
@@ -203,21 +220,27 @@ fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag)
             }
         }
 
-        // Clean up the hook
+        // Clean up the hook and callback
         manager->removeGlobalTerminationHook();
+        manager->unregisterTerminationCallback();
 
-        // Always output statistics, regardless of timeout
-        bool timed_out = final_timeout;
-        const char *timeout_status = timed_out ? " (TO)" : "";
+        // Always output statistics, regardless of termination reason
+        const char *timeout_status = terminated_by_timeout ? " (TO)"
+            : terminated_by_other                          ? " (ENG)"
+            : manager->hasTermination()                    ? " (UNK)"
+                                                           : " ";
 
         printf("c [BDD] result = %d, [nodes = %ld, vars = %d, reorderings = "
-               "%d, memory = %ld bytes] [time = %f]%s \n",
+               "%d, memory = %ld bytes] [time = %f] [processed %d/%d gates], "
+               "%s \n",
                ret,
                manager->readNodeCount(),
                manager->readSize(),
                manager->readReorderings(),
                (long)manager->readMemoryInUse(),
                fastLEC::ResMgr::get().get_runtime() - start_time,
+               gate_count,
+               total_gates,
                timeout_status);
         fflush(stdout);
 

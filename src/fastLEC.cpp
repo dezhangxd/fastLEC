@@ -646,6 +646,16 @@ Prover::run_sweeping(std::shared_ptr<fastLEC::Sweeper> sweeper)
             ret = seq_SAT_kissat(cnf);
             break;
         }
+        case Mode::BDD_sweeping:
+        {
+            ret = seq_BDD_cudd(sub_graph);
+            break;
+        }
+        case Mode::pBDD_sweeping:
+        {
+            ret = para_BDD_sylvan(sub_graph, Param::get().n_threads);
+            break;
+        }
         case Mode::pSAT_sweeping:
         {
             std::shared_ptr<fastLEC::CNF> cnf =

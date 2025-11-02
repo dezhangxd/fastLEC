@@ -22,6 +22,9 @@ extern std::atomic<bool> global_solved_for_PPE;
 // CUDD hook function to check global termination flag
 extern "C" int mycheckhook(DdManager *dd, const char *where, void *f);
 
+// CUDD termination callback function (called more frequently than hooks)
+extern "C" int myterminationcallback(const void *arg);
+
 /**
  * RAII wrapper for CUDD DdManager
  * Automatically manages the lifecycle of DdManager
@@ -131,6 +134,22 @@ public:
         // Remove the hook
         Cudd_RemoveHook(manager_, mycheckhook, CUDD_PRE_REORDERING_HOOK);
         Cudd_RemoveHook(manager_, mycheckhook, CUDD_PRE_GC_HOOK);
+    }
+
+    // Termination callback management (called more frequently than hooks)
+    void registerTerminationCallback()
+    {
+        // Register termination callback which is checked more frequently
+        // This will set CUDD_TERMINATION error code when callback returns
+        // non-zero
+        Cudd_RegisterTerminationCallback(
+            manager_, myterminationcallback, nullptr);
+    }
+
+    void unregisterTerminationCallback()
+    {
+        // Unregister termination callback
+        Cudd_RegisterTerminationCallback(manager_, nullptr, nullptr);
     }
 
     void printDebug(DdNode *dd, int n, int pr)
