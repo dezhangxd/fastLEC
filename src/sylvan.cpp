@@ -5,6 +5,7 @@
 #include <thread>
 #include <atomic>
 #include <algorithm>
+#include <lace.h>
 
 #ifdef __APPLE__
 #include <sys/sysctl.h>
@@ -196,10 +197,14 @@ bool is_timeout_reached()
     // Check force abort flag
     if (g_force_abort.load())
     {
+        // printf("c [Sylvan] Timeout reached\n");
+        // fflush(stdout);
         return true;
     }
 
     // Use fastLEC's runtime check
+    // printf("c [Sylvan] Runtime: %f\n", fastLEC::ResMgr::get().get_runtime());
+    // fflush(stdout);
     return fastLEC::ResMgr::get().get_runtime() > fastLEC::Param::get().timeout;
 }
 
@@ -226,6 +231,7 @@ void start_force_timeout_control()
                 if (fastLEC::ResMgr::get().get_runtime() >
                     fastLEC::Param::get().timeout)
                 {
+                    // lace_steal_interrupt();
                     g_force_abort.store(true);
                     break;
                 }
@@ -439,6 +445,9 @@ fastLEC::Prover::para_BDD_sylvan(std::shared_ptr<fastLEC::XAG> xag, int n_t)
 
     // Stop force timeout control
     stop_force_timeout_control();
+
+    sylvan_quit();
+    lace_stop();
 
     clear_current_xag();
 
