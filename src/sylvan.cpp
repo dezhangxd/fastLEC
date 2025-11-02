@@ -4,6 +4,17 @@
 #include <mutex>
 #include <thread>
 #include <atomic>
+#include <algorithm>
+
+#ifdef __APPLE__
+#include <sys/sysctl.h>
+#include <mach/mach.h>
+#elif defined(__linux__)
+#include <sys/sysinfo.h>
+#include <unistd.h>
+#elif defined(_WIN32)
+#include <windows.h>
+#endif
 
 extern "C"
 {
@@ -24,7 +35,142 @@ std::mutex g_xag_mutex;
 std::atomic<bool> g_force_abort{false};
 std::thread g_timeout_thread;
 std::atomic<bool> g_timeout_thread_running{false};
+
+// Sylvan size configuration (calculated based on system resources)
+long long g_nodes_initial = 1LL << 22;
+long long g_nodes_max = 1LL << 26;
+long long g_cache_initial = 1LL << 22;
+long long g_cache_max = 1LL << 26;
 } // namespace
+
+/**
+ * Get total system memory in bytes
+ */
+size_t get_system_memory()
+{
+#ifdef __APPLE__
+    uint64_t mem_size = 0;
+    size_t len = sizeof(mem_size);
+    if (sysctlbyname("hw.memsize", &mem_size, &len, nullptr, 0) == 0)
+    {
+        return static_cast<size_t>(mem_size);
+    }
+    return 8ULL * 1024 * 1024 * 1024; // Default 8GB if can't detect
+#elif defined(__linux__)
+    struct sysinfo info;
+    if (sysinfo(&info) == 0)
+    {
+        return static_cast<size_t>(info.totalram) * info.mem_unit;
+    }
+    return 8ULL * 1024 * 1024 * 1024; // Default 8GB if can't detect
+#elif defined(_WIN32)
+    MEMORYSTATUSEX status;
+    status.dwLength = sizeof(status);
+    if (GlobalMemoryStatusEx(&status))
+    {
+        return static_cast<size_t>(status.ullTotalPhys);
+    }
+    return 8ULL * 1024 * 1024 * 1024; // Default 8GB if can't detect
+#else
+    // Unknown platform, use conservative default
+    return 8ULL * 1024 * 1024 * 1024; // Default 8GB
+#endif
+}
+
+/**
+ * Calculate optimal sylvan sizes based on system resources
+ * Memory usage: 24 bytes per node, 36 bytes per cache bucket
+ *
+ * @param n_workers Number of worker threads
+ * @param n_cores Number of CPU cores
+ * @param total_memory Total system memory in bytes
+ */
+void calculate_sylvan_sizes(int n_workers, int n_cores, size_t total_memory)
+{
+    // Use at most 70% of total memory for sylvan
+    // Reserve 30% for OS and other processes
+    size_t available_memory = static_cast<size_t>(total_memory * 0.7);
+
+    // Memory per byte: 24 bytes per node, 36 bytes per cache bucket
+    // Typical ratio: cache should be 1.5-2x larger than nodes for good
+    // performance Let's allocate: 40% for nodes, 60% for cache
+    size_t nodes_memory = static_cast<size_t>(available_memory * 0.4);
+    size_t cache_memory = static_cast<size_t>(available_memory * 0.6);
+
+    // Calculate maximum sizes (in number of entries)
+    // nodes_max = nodes_memory / 24
+    // cache_max = cache_memory / 36
+    long long nodes_max_calc = static_cast<long long>(nodes_memory / 24);
+    long long cache_max_calc = static_cast<long long>(cache_memory / 36);
+
+    // Convert to power of 2 (find the largest 2^n that fits)
+    auto log2_floor = [](long long x) -> int
+    {
+        if (x <= 0)
+            return 0;
+        int log = 0;
+        while (x > 1)
+        {
+            x >>= 1;
+            log++;
+        }
+        return log;
+    };
+
+    // Find appropriate 2^n sizes
+    int nodes_max_exp = log2_floor(nodes_max_calc);
+    int cache_max_exp = log2_floor(cache_max_calc);
+
+    // Set reasonable bounds:
+    // Minimum: 1<<20 (small systems)
+    // Maximum: 1<<32 (very large systems, but practical max is 1<<30)
+    nodes_max_exp = std::max(20, std::min(30, nodes_max_exp));
+    cache_max_exp = std::max(20, std::min(30, cache_max_exp));
+
+    // Initial size should be smaller (1/4 to 1/16 of max)
+    // But at least 1<<20 for performance
+    int nodes_initial_exp = std::max(20, nodes_max_exp - 4);
+    int cache_initial_exp = std::max(20, cache_max_exp - 4);
+
+    // Adjust based on number of workers
+    // More workers may need slightly larger initial size
+    if (n_workers > 8)
+    {
+        nodes_initial_exp = std::min(nodes_initial_exp + 1, nodes_max_exp);
+        cache_initial_exp = std::min(cache_initial_exp + 1, cache_max_exp);
+    }
+
+    g_nodes_initial = 1LL << nodes_initial_exp;
+    g_nodes_max = 1LL << nodes_max_exp;
+    g_cache_initial = 1LL << cache_initial_exp;
+    g_cache_max = 1LL << cache_max_exp;
+
+    // Calculate actual memory usage
+    size_t nodes_mem = 24ULL * g_nodes_max;
+    size_t cache_mem = 36ULL * g_cache_max;
+    double total_mem_gb = (nodes_mem + cache_mem) / (1024.0 * 1024.0 * 1024.0);
+
+    if (fastLEC::Param::get().verbose > 0)
+    {
+        printf("c [Sylvan] Configuration: workers=%d, cores=%d, "
+               "total_memory=%.2f GB\n",
+               n_workers,
+               n_cores,
+               total_memory / (1024.0 * 1024.0 * 1024.0));
+        printf("c [Sylvan] Nodes: initial=2^%d (%.2f MB), max=2^%d (%.2f GB)\n",
+               nodes_initial_exp,
+               g_nodes_initial * 24.0 / (1024 * 1024),
+               nodes_max_exp,
+               g_nodes_max * 24.0 / (1024 * 1024 * 1024));
+        printf("c [Sylvan] Cache: initial=2^%d (%.2f MB), max=2^%d (%.2f GB)\n",
+               cache_initial_exp,
+               g_cache_initial * 36.0 / (1024 * 1024),
+               cache_max_exp,
+               g_cache_max * 36.0 / (1024 * 1024 * 1024));
+        printf("c [Sylvan] Total allocated memory: %.2f GB\n", total_mem_gb);
+        fflush(stdout);
+    }
+}
 
 void set_current_xag(std::shared_ptr<fastLEC::XAG> xag)
 {
@@ -223,8 +369,8 @@ TASK_0(fastLEC::ret_vals, _main)
     // - 1<<31 cache: 72 GB
     // - 1<<32 cache: 144 GB
 
-    // sylvan_set_sizes(1LL<<22, 1LL<<26, 1LL<<22, 1LL<<26); //default
-    sylvan_set_sizes(1LL << 22, 1LL << 30, 1LL << 22, 1LL << 30); // 50G
+    sylvan_set_sizes(
+        g_nodes_initial, g_nodes_max, g_cache_initial, g_cache_max);
     sylvan_init_package();
 
     // Initialize the BDD module with granularity 1 (cache every operation)
@@ -270,6 +416,12 @@ fastLEC::Prover::para_BDD_sylvan(std::shared_ptr<fastLEC::XAG> xag, int n_t)
     start_force_timeout_control();
 
     int n_workers = n_t;
+
+    // Calculate optimal sylvan sizes based on system resources
+    int n_cores = static_cast<int>(std::thread::hardware_concurrency());
+    size_t total_memory = get_system_memory();
+    calculate_sylvan_sizes(n_workers, n_cores, total_memory);
+
     size_t deque_size = 0;
 
     lace_start(n_workers, deque_size);
