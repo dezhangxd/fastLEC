@@ -15,7 +15,7 @@ BUILD_DIR="build"
 # command="-m PPE_sweeping -c 1 -v 2 -t 500 -p log_sub_aiger 1 -p log_dir ./logs/"
 # command="-m PPE_sweeping -c 1 -v 2 -t 500 -p log_features 1 -p log_dir ./logs/"
 # command="-m half_sweeping -c 32 -v 2 -t 100"
-command="-m pBDD_sweeping -c 8 -v 2 -t 10 "
+command="-m pBDD_sweeping -c 8 -v 2 -t 5"
 
 # rm -rf *.aig
 ./${BUILD_DIR}/bin/fastLEC -i ../ins/all/test_11_TOP8.aiger $command |gnomon

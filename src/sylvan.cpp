@@ -37,6 +37,10 @@ std::atomic<bool> g_force_abort{false};
 std::thread g_timeout_thread;
 std::atomic<bool> g_timeout_thread_running{false};
 
+// Sylvan quit control - prevent multiple calls to sylvan_quit()
+std::atomic<bool> g_sylvan_quit_called{false};
+std::mutex g_sylvan_quit_mutex;
+
 // Sylvan size configuration (calculated based on system resources)
 long long g_nodes_initial = 1LL << 22;
 long long g_nodes_max = 1LL << 26;
@@ -191,21 +195,20 @@ void clear_current_xag()
     g_current_xag.reset();
 }
 
-// Check if timeout is reached using fastLEC's time functions
 bool is_timeout_reached()
 {
-    // Check force abort flag
-    if (g_force_abort.load())
-    {
-        // printf("c [Sylvan] Timeout reached\n");
-        // fflush(stdout);
-        return true;
-    }
-
-    // Use fastLEC's runtime check
-    // printf("c [Sylvan] Runtime: %f\n", fastLEC::ResMgr::get().get_runtime());
-    // fflush(stdout);
     return fastLEC::ResMgr::get().get_runtime() > fastLEC::Param::get().timeout;
+}
+
+// Safe wrapper for sylvan_quit() - ensures it's only called once
+void safe_sylvan_quit()
+{
+    std::lock_guard<std::mutex> lock(g_sylvan_quit_mutex);
+    if (!g_sylvan_quit_called.load())
+    {
+        g_sylvan_quit_called.store(true);
+        sylvan_quit();
+    }
 }
 
 // Start force timeout control
@@ -231,8 +234,12 @@ void start_force_timeout_control()
                 if (fastLEC::ResMgr::get().get_runtime() >
                     fastLEC::Param::get().timeout)
                 {
-                    // lace_steal_interrupt();
+                    printf("c [Sylvan] Timeout reached\n");
+                    fflush(stdout);
                     g_force_abort.store(true);
+
+                    safe_sylvan_quit();
+                    lace_stop();
                     break;
                 }
             }
@@ -276,7 +283,6 @@ TASK_0(fastLEC::ret_vals, miter_build_bdd)
         vars[vpi] = Bdd::bddVar(vpi);
     }
 
-    int cnt = 0;
     for (int gid : xag->used_gates)
     {
         Gate &g = xag->gates[gid];
@@ -309,14 +315,6 @@ TASK_0(fastLEC::ret_vals, miter_build_bdd)
         {
             return ret_vals::ret_UNK;
         }
-        // More frequent timeout checks
-        if (cnt++ % 3 == 2)
-        { // Check every 3 gates for more frequent checks
-            if (is_timeout_reached())
-            {
-                return ret_vals::ret_UNK;
-            }
-        }
     }
 
     // Check timeout before result check
@@ -331,24 +329,16 @@ TASK_0(fastLEC::ret_vals, miter_build_bdd)
     if (aiger_sign(xag->PO))
     {
         if (vars[vpo] == Bdd::bddOne())
-        {
             return ret_vals::ret_UNS;
-        }
         else
-        {
             return ret_vals::ret_SAT;
-        }
     }
     else
     {
         if (vars[vpo] == Bdd::bddZero())
-        {
             return ret_vals::ret_UNS;
-        }
         else
-        {
             return ret_vals::ret_SAT;
-        }
     }
 
     return fastLEC::ret_vals::ret_UNS;
@@ -407,8 +397,9 @@ TASK_0(fastLEC::ret_vals, _main)
            total_memory_mb);
     fflush(stdout);
 
-    // And quit, freeing memory
-    sylvan_quit();
+    // Don't call sylvan_quit() here - lace workers may still be running
+    // Let the main thread handle cleanup after lace workers are stopped
+    // safe_sylvan_quit() will be called in para_BDD_sylvan after lace_stop()
 
     return ret;
 }
@@ -416,6 +407,9 @@ TASK_0(fastLEC::ret_vals, _main)
 fastLEC::ret_vals
 fastLEC::Prover::para_BDD_sylvan(std::shared_ptr<fastLEC::XAG> xag, int n_t)
 {
+    // Reset sylvan quit flag at the start of each call
+    g_sylvan_quit_called.store(false);
+
     set_current_xag(xag);
 
     // Start force timeout control
@@ -443,10 +437,13 @@ fastLEC::Prover::para_BDD_sylvan(std::shared_ptr<fastLEC::XAG> xag, int n_t)
         ret = ret_UNK;
     }
 
-    // Stop force timeout control
+    // Stop force timeout control first
     stop_force_timeout_control();
 
-    sylvan_quit();
+    printf("c [Sylvan] Quitting Sylvan\n");
+    fflush(stdout);
+
+    safe_sylvan_quit();
     lace_stop();
 
     clear_current_xag();
