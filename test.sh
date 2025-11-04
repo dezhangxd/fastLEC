@@ -18,7 +18,7 @@ BUILD_DIR="build"
 command="-m pBDD_sweeping -c 8 -v 2 -t 5"
 
 # rm -rf *.aig
-./${BUILD_DIR}/bin/fastLEC -i ../ins/all/test_11_TOP8.aiger $command |gnomon
+./${BUILD_DIR}/bin/fastLEC -i ../ins/all/test_11_TOP6.aiger $command |gnomon
 # ./${BUILD_DIR}/bin/fastLEC -i ./logs/test_16_TOP11_30.aig $command |gnomon
 
 # ./${BUILD_DIR}/bin/fastLEC -i ../ins/miter_right/bit5/mul5o5.aig $command |gnomon

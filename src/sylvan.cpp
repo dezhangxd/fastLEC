@@ -32,14 +32,9 @@ namespace
 std::shared_ptr<fastLEC::XAG> g_current_xag;
 std::mutex g_xag_mutex;
 
-// Force abort control
-std::atomic<bool> g_force_abort{false};
-std::thread g_timeout_thread;
-std::atomic<bool> g_timeout_thread_running{false};
-
 // Sylvan quit control - prevent multiple calls to sylvan_quit()
-std::atomic<bool> g_sylvan_quit_called{false};
-std::mutex g_sylvan_quit_mutex;
+std::atomic<bool> g_sylvan_finished{false};
+std::mutex g_timeout_mutex;
 
 // Sylvan size configuration (calculated based on system resources)
 long long g_nodes_initial = 1LL << 22;
@@ -203,128 +198,63 @@ bool is_timeout_reached()
 // Safe wrapper for sylvan_quit() - ensures it's only called once
 void safe_sylvan_quit()
 {
-    std::lock_guard<std::mutex> lock(g_sylvan_quit_mutex);
-    if (!g_sylvan_quit_called.load())
+    std::lock_guard<std::mutex> lock(g_timeout_mutex);
+    if (!g_sylvan_finished.load())
     {
-        g_sylvan_quit_called.store(true);
+        g_sylvan_finished.store(true);
         sylvan_quit();
     }
-}
-
-// Start force timeout control
-void start_force_timeout_control()
-{
-    if (g_timeout_thread_running.load())
-    {
-        return;
-    }
-
-    g_force_abort.store(false);
-    g_timeout_thread_running.store(true);
-
-    g_timeout_thread = std::thread(
-        [&]()
-        {
-            while (g_timeout_thread_running.load())
-            {
-                std::this_thread::sleep_for(
-                    std::chrono::milliseconds(50)); // Check every 50ms
-
-                // Use fastLEC's runtime check
-                if (fastLEC::ResMgr::get().get_runtime() >
-                    fastLEC::Param::get().timeout)
-                {
-                    printf("c [Sylvan] Timeout reached\n");
-                    fflush(stdout);
-                    g_force_abort.store(true);
-
-                    safe_sylvan_quit();
-                    lace_stop();
-                    break;
-                }
-            }
-        });
-}
-
-// Stop force timeout control
-void stop_force_timeout_control()
-{
-    if (!g_timeout_thread_running.load())
-    {
-        return;
-    }
-
-    g_timeout_thread_running.store(false);
-    if (g_timeout_thread.joinable())
-    {
-        g_timeout_thread.join();
-    }
-    g_force_abort.store(false);
 }
 
 TASK_0(fastLEC::ret_vals, miter_build_bdd)
 {
     auto xag = get_current_xag();
     if (!xag)
-    {
         return fastLEC::ret_vals::ret_UNK;
-    }
 
     // Check timeout at task start
     if (is_timeout_reached())
-    {
         return ret_vals::ret_UNK;
-    }
 
     std::vector<Bdd> vars(xag->max_var + 1);
+    vars[0] = Bdd::bddZero();
+
     for (int pi : xag->PI)
     {
-        int vpi = aiger_var(pi) - 1;
+        int vpi = aiger_var(pi);
         vars[vpi] = Bdd::bddVar(vpi);
     }
 
     for (int gid : xag->used_gates)
     {
         Gate &g = xag->gates[gid];
-        int vout = aiger_var(g.output) - 1;
-        int v1 = aiger_var(g.inputs[0]) - 1;
-        int v2 = aiger_var(g.inputs[1]) - 1;
+        int vout = aiger_var(g.output);
+        int v1 = aiger_var(g.inputs[0]);
+        int v2 = aiger_var(g.inputs[1]);
         // Check timeout before BDD operation
         if (is_timeout_reached())
-        {
             return ret_vals::ret_UNK;
-        }
 
         Bdd b1 = aiger_sign(g.inputs[0]) ? !vars[v1] : vars[v1];
         Bdd b2 = aiger_sign(g.inputs[1]) ? !vars[v2] : vars[v2];
         if (g.type == GateType::AND2)
-        {
             vars[vout] = b1 * b2;
-        }
         else if (g.type == GateType::XOR2)
-        {
             vars[vout] = b1 ^ b2;
-        }
         else
-        {
             assert(false);
-        }
 
         // Check timeout after BDD operation
         if (is_timeout_reached())
-        {
             return ret_vals::ret_UNK;
-        }
     }
 
     // Check timeout before result check
     YIELD_NEWFRAME(); // Let Lace check if interruption is needed
     if (is_timeout_reached())
-    {
         return ret_vals::ret_UNK;
-    }
 
-    int vpo = aiger_var(xag->PO) - 1;
+    int vpo = aiger_var(xag->PO);
 
     if (aiger_sign(xag->PO))
     {
@@ -341,7 +271,7 @@ TASK_0(fastLEC::ret_vals, miter_build_bdd)
             return ret_vals::ret_SAT;
     }
 
-    return fastLEC::ret_vals::ret_UNS;
+    return fastLEC::ret_vals::ret_UNK;
 }
 
 TASK_0(fastLEC::ret_vals, _main)
@@ -408,12 +338,30 @@ fastLEC::ret_vals
 fastLEC::Prover::para_BDD_sylvan(std::shared_ptr<fastLEC::XAG> xag, int n_t)
 {
     // Reset sylvan quit flag at the start of each call
-    g_sylvan_quit_called.store(false);
+    g_sylvan_finished.store(false);
 
     set_current_xag(xag);
 
-    // Start force timeout control
-    start_force_timeout_control();
+    std::thread timeout_thread = std::thread(
+        [&]()
+        {
+            while (!g_sylvan_finished.load())
+            {
+                std::this_thread::sleep_for(
+                    std::chrono::milliseconds(50)); // Check every 50ms
+
+                // Use fastLEC's runtime check
+                if (fastLEC::ResMgr::get().get_runtime() >
+                    fastLEC::Param::get().timeout)
+                {
+                    printf("c [Sylvan] Timeout reached\n");
+                    fflush(stdout);
+
+                    safe_sylvan_quit();
+                    break;
+                }
+            }
+        });
 
     int n_workers = n_t;
 
@@ -430,6 +378,8 @@ fastLEC::Prover::para_BDD_sylvan(std::shared_ptr<fastLEC::XAG> xag, int n_t)
     try
     {
         ret = RUN(_main);
+        g_sylvan_finished.store(true);
+        // std::cout << *g_current_xag << std::endl;
     }
     catch (...)
     {
@@ -437,16 +387,13 @@ fastLEC::Prover::para_BDD_sylvan(std::shared_ptr<fastLEC::XAG> xag, int n_t)
         ret = ret_UNK;
     }
 
-    // Stop force timeout control first
-    stop_force_timeout_control();
+    timeout_thread.join();
 
     printf("c [Sylvan] Quitting Sylvan\n");
     fflush(stdout);
 
     safe_sylvan_quit();
     lace_stop();
-
-    clear_current_xag();
 
     return ret;
 }
