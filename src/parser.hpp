@@ -66,6 +66,7 @@ enum engines
     USER_PARAM(log_sub_aiger, bool, false, "Log the sub-aiger")                \
     USER_PARAM(log_sub_cnfs, bool, false, "Log the CNFs of sub-graphs")        \
     USER_PARAM(log_features, bool, false, "Log the features of XAG")           \
+    USER_PARAM(vis, bool, false, "visualize the log files")                    \
     USER_PARAM(log_dir, std::string, "./", "Log directory")                    \
     USER_PARAM(log_items_per_line, int, 2, "Number of items per line in log")  \
     USER_PARAM(prt_cpu_t_interval, double, 50.0, "Time interval for printing") \

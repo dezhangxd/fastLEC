@@ -369,4 +369,22 @@ std::ostream &operator<<(std::ostream &os, const BitVector &bv)
     }
     return os;
 }
+
+void check_dir_and_create(const std::string &file_dir)
+{
+    size_t last_slash = file_dir.find_last_of('/');
+    if (last_slash != std::string::npos)
+    {
+        std::string dir_path = file_dir.substr(0, last_slash);
+#if defined(_WIN32)
+        _mkdir(dir_path.c_str());
+#else
+        struct stat st;
+        if (stat(dir_path.c_str(), &st) != 0)
+        {
+            mkdir(dir_path.c_str(), 0755);
+        }
+#endif
+    }
+}
 } // namespace fastLEC

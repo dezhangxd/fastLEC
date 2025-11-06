@@ -1,13 +1,12 @@
 #include "fastLEC.hpp"
 #include "parser.hpp"
+#include "basic.hpp"
 #include <cstdio>
 #include <iomanip>
 #include <sstream>
 #include <algorithm>
 #include <string>
 #include <fstream>
-#include <sys/stat.h>
-#include <sys/types.h>
 
 using namespace fastLEC;
 
@@ -324,24 +323,6 @@ std::shared_ptr<fastLEC::XAG> Sweeper::next_sub_graph()
     }
 
     return sub_xag;
-}
-
-void check_dir_and_create(const std::string &file_dir)
-{
-    size_t last_slash = file_dir.find_last_of('/');
-    if (last_slash != std::string::npos)
-    {
-        std::string dir_path = file_dir.substr(0, last_slash);
-#if defined(_WIN32)
-        _mkdir(dir_path.c_str());
-#else
-        struct stat st;
-        if (stat(dir_path.c_str(), &st) != 0)
-        {
-            mkdir(dir_path.c_str(), 0755);
-        }
-#endif
-    }
 }
 
 void Sweeper::log_next_sub_cnfs()

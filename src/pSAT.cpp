@@ -292,10 +292,17 @@ void fastLEC::PartitionSAT::worker_func(int cpu_id)
                 if (split_mutex.try_lock())
                 {
                     std::shared_ptr<Task> task = pick_split_task();
+
+                    if (Param::get().custom_params.vis)
+                    {
+                        Visualizer vis(this->xag);
+                        vis.visualize(task->cube);
+                    }
+
                     if (task)
                     {
                         bool r = split_task_and_submit(task);
-                        if (!r)
+                        if (r == ret_father_solved)
                             terminate_task_by_id(task->id);
                     }
                     split_mutex.unlock();
@@ -630,21 +637,21 @@ bool fastLEC::PartitionSAT::split_task_and_submit(
     std::shared_ptr<fastLEC::Task> father)
 {
     std::vector<int> split_vars = pick_split_vars(father);
-    if (split_vars.size() == 1 && split_vars[0] == 0)
-        return false;
+    if (split_vars.size() == 1 && split_vars[0] == 0) // UNSAT: {0}
+        return ret_father_solved;
 
     if (father->is_solved())
-        return false;
+        return ret_father_solved;
 
     if (split_vars.size() == 0)
-        return true;
+        return ret_cannot_split;
 
     std::vector<int> split_vars_tmp = split_vars;
     for (int l : father->cube)
         split_vars_tmp.push_back(abs(l));
     bool is_repeat = check_repeat(split_vars_tmp);
     if (is_repeat)
-        return true;
+        return ret_repeat_task;
 
     std::vector<std::shared_ptr<fastLEC::Task>> sons;
     std::vector<int> sons_ids;
@@ -706,10 +713,10 @@ bool fastLEC::PartitionSAT::split_task_and_submit(
         }
 #endif
 
-        return true;
+        return ret_success_split;
     }
     else
-        return false;
+        return ret_father_solved;
 }
 
 bool fastLEC::PartitionSAT::compute_mask(std::shared_ptr<Task> task,

@@ -79,7 +79,8 @@ public:
     double runtime() const;
 
     int father;                         // father task id
-    std::vector<std::vector<int>> sons; // vectors of Twins, Quadruplets, ...
+    std::vector<std::vector<int>> sons; // vectors of Twins, Quadruplets, ...,
+                                        // a task can be split more than once
     unsigned split_ct() const { return sons.size(); }
 
     unsigned level;

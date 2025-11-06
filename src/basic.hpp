@@ -7,6 +7,9 @@
 #include <random>
 #include <atomic>
 
+#include <sys/stat.h>
+#include <sys/types.h>
+
 // ----------------------------------------------------------------------------
 // basic.hpp
 // This file contains some basic definitions and functions
@@ -136,6 +139,8 @@ public:
                                     const fastLEC::BitVector &bv);
 };
 
+void check_dir_and_create(const std::string &file_dir);
+
 } // namespace fastLEC
 
 namespace std
@@ -170,4 +175,5 @@ template <> struct hash<std::vector<int>>
         return seed;
     }
 };
+
 } // namespace std

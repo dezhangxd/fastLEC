@@ -12,6 +12,7 @@
 #include "CNF.hpp"
 #include "basic.hpp"
 #include "pSAT_task.hpp"
+#include "vis.hpp"
 
 #ifdef __cplusplus
 extern "C"
@@ -97,6 +98,10 @@ public:
     // heuristic 2
     int decide_split_var_num();
     bool check_repeat(std::vector<int> &cube_vars) const;
+#define ret_father_solved false
+#define ret_success_split true
+#define ret_cannot_split true
+#define ret_repeat_task true
     bool split_task_and_submit(std::shared_ptr<fastLEC::Task> father);
     std::vector<int> pick_split_vars(std::shared_ptr<fastLEC::Task> father);
 
