@@ -629,6 +629,7 @@ set(SOURCES
     src/pSAT_heuristics.cpp
     src/pSAT_task.cpp
     src/selection.cpp
+    src/vis.cpp
 )
 
 # CUDA source files

@@ -764,7 +764,7 @@ fastLEC::PartitionSAT::pick_split_vars(std::shared_ptr<fastLEC::Task> father)
         std::swap(candidates_vars[pos], candidates_vars[pos + 1]);
     }
 
-    unsigned pick_var_num = this->decide_split_vars();
+    unsigned pick_var_num = this->decide_split_var_num();
 
     std::vector<int> pick_vars;
     for (unsigned i = 0; pick_vars.size() < (unsigned)pick_var_num &&

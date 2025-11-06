@@ -141,6 +141,15 @@ public:
     int to_cnf_lit(int xag_lit);
 
     bool check_XAG();
+
+    //---------------------------------------------------
+    // visualization
+    //---------------------------------------------------
+    // void log_cnf(const char *cnf_dir, std::vector<int> &unit_clauses);
+    // void split_run_cnf(const char *cnf_dir, std::vector<int> &unit_clauses);
+    // void read_runtime_datas(const char *runtime_dir);
+    // void write_dot(const char *dot_dir, std::vector<bool> mask);
+    // void visualization(std::shared_ptr<fastLEC::Task> task);
 };
 
 } // namespace fastLEC

@@ -63,19 +63,23 @@ private:
 
     void timeout_monitor_func();
 
-    // ------------------------------------------------------------
-    // mask is variables that should not be used.
-    bool compute_mask(std::shared_ptr<Task> task, std::vector<bool> &mask);
-    void compute_scores(const std::vector<bool> &mask,
-                        std::vector<double> &scores);
-    // ------------------------------------------------------------
-
 public:
     PartitionSAT(std::shared_ptr<fastLEC::XAG> xag, unsigned n_threads);
     ~PartitionSAT();
 
-    std::shared_ptr<Task> get_task_by_cpu(int cpu_id);
-    std::shared_ptr<Task> get_task_by_id(int task_id);
+    std::shared_ptr<fastLEC::Task> get_task_by_cpu(int cpu_id);
+    std::shared_ptr<fastLEC::Task> get_task_by_id(int task_id);
+    std::shared_ptr<kissat> get_solver_by_cpu(int cpu_id);
+    unsigned num_tasks() const { return all_tasks.size(); }
+
+    // ------------------------------------------------------------
+    // mask is variables that should not be used.
+    bool compute_mask(std::shared_ptr<fastLEC::Task> task,
+                      std::vector<bool> &mask);
+    void compute_scores(const std::vector<bool> &mask,
+                        std::vector<double> &scores);
+    // ------------------------------------------------------------
+    ret_vals prop_task_status();
 
     bool propagate_task(std::shared_ptr<Task> task,
                         std::vector<bool> &forbidden_vars,
@@ -87,22 +91,19 @@ public:
     void terminate_task_by_cpu(int cpu_id);
     void terminate_all_tasks();
 
+    // heuristic 1
     std::shared_ptr<fastLEC::Task> pick_split_task();
-    std::vector<int> pick_split_vars(std::shared_ptr<fastLEC::Task> father);
-    bool check_repeat(std::vector<int> &cube_vars) const;
-    bool compute_scores();
-    int decide_split_vars();
-    bool split_task_and_submit(std::shared_ptr<fastLEC::Task> father);
 
-    std::shared_ptr<kissat> get_solver_by_cpu(int cpu_id);
-    unsigned num_tasks() const { return all_tasks.size(); }
+    // heuristic 2
+    int decide_split_var_num();
+    bool check_repeat(std::vector<int> &cube_vars) const;
+    bool split_task_and_submit(std::shared_ptr<fastLEC::Task> father);
+    std::vector<int> pick_split_vars(std::shared_ptr<fastLEC::Task> father);
 
     void show_unsolved_tasks();
     void show_detailed_tasks();
     void show_pool();
     friend std::ostream &operator<<(std::ostream &os, const PartitionSAT &ps);
-
-    ret_vals prop_task_status();
 
     ret_vals check();
 };

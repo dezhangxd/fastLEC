@@ -2,7 +2,7 @@
 #include "XAG.hpp"
 #include "parser.hpp"
 
-int fastLEC::PartitionSAT::decide_split_vars()
+int fastLEC::PartitionSAT::decide_split_var_num()
 {
     int ct = 1;
     double nt = n_threads + 1.0;

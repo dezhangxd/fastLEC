@@ -5,7 +5,6 @@
 #include <thread>
 #include <atomic>
 #include <algorithm>
-#include <lace.h>
 
 #ifdef __APPLE__
 #include <sys/sysctl.h>

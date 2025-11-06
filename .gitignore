@@ -109,6 +109,7 @@ build/
 
 logs/
 logs_bdd/
+vis/
 
 clean
 .vscode/
