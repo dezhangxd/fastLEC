@@ -9,6 +9,7 @@
 #include <vector>
 #include <string>
 #include <iostream>
+#include <mutex>
 
 #if defined(_WIN32)
 #include <io.h>
@@ -223,9 +224,6 @@ void fastLEC::Visualizer::visualize(std::vector<int> unit_clauses)
             return;
         }
 
-        // mpirun -np 200 ./mpi_para ../vis/test_11_TOP6.cnf 0
-        // ../vis/test_11_TOP6.log
-
         std::string command = "";
         command += "mpirun -np " + std::to_string(available_threads);
         command += " " + mpi_para_path;
@@ -235,7 +233,11 @@ void fastLEC::Visualizer::visualize(std::vector<int> unit_clauses)
         command += " " + basefilename + ".log";
 
 #if defined(__unix__) || defined(__APPLE__) || defined(__linux__)
-        system(command.c_str());
+        static std::mutex system_mutex;
+        {
+            std::lock_guard<std::mutex> lock(system_mutex);
+            system(command.c_str());
+        }
 #elif defined(_WIN32)
         // Windows does not support mpirun and system may behave differently.
         // Consider alternative implementation or show a warning.
