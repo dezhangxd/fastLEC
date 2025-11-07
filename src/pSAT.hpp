@@ -98,11 +98,13 @@ public:
     // heuristic 2
     int decide_split_var_num();
     bool check_repeat(std::vector<int> &cube_vars) const;
-#define ret_father_solved false
-#define ret_success_split true
-#define ret_cannot_split true
-#define ret_repeat_task true
-    bool split_task_and_submit(std::shared_ptr<fastLEC::Task> father);
+#define ret_father_solved 0
+#define ret_success_split 1
+#define ret_cannot_split 2
+#define ret_repeat_task 3
+#define ret_max_split 4
+#define ret_pool_has_tasks 5
+    int split_task_and_submit(std::shared_ptr<fastLEC::Task> father);
     std::vector<int> pick_split_vars(std::shared_ptr<fastLEC::Task> father);
 
     void show_unsolved_tasks();

@@ -301,7 +301,9 @@ void fastLEC::PartitionSAT::worker_func(int cpu_id)
 
                     if (task)
                     {
-                        bool r = split_task_and_submit(task);
+                        int r = split_task_and_submit(task);
+                        printf("c [split] task = %d, ret = %d\n", task->id, r);
+                        fflush(stdout);
                         if (r == ret_father_solved)
                             terminate_task_by_id(task->id);
                     }
@@ -631,9 +633,7 @@ bool fastLEC::PartitionSAT::check_repeat(std::vector<int> &cube_var) const
     return false;
 }
 
-// return true if we cannot split this task now
-// return false if father is solved
-bool fastLEC::PartitionSAT::split_task_and_submit(
+int fastLEC::PartitionSAT::split_task_and_submit(
     std::shared_ptr<fastLEC::Task> father)
 {
     std::vector<int> split_vars = pick_split_vars(father);
@@ -645,6 +645,13 @@ bool fastLEC::PartitionSAT::split_task_and_submit(
 
     if (split_vars.size() == 0)
         return ret_cannot_split;
+
+    int max_split_num = Param::get().custom_params.gt_max_split;
+    if (father->split_ct() >= max_split_num)
+        return ret_max_split;
+
+    if (q_wait_ids.size() > 0)
+        return ret_pool_has_tasks;
 
     std::vector<int> split_vars_tmp = split_vars;
     for (int l : father->cube)
@@ -680,6 +687,9 @@ bool fastLEC::PartitionSAT::split_task_and_submit(
         if (father->is_solved())
             break;
     }
+
+    if (father->split_ct() >= max_split_num)
+        return ret_max_split;
 
     if (!father->is_solved())
     {

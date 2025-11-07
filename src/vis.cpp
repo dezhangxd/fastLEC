@@ -1,7 +1,10 @@
 #include "vis.hpp"
 #include "basic.hpp"
 #include "parser.hpp"
+
 #include <cstdio>
+#include <fstream>
+
 #if defined(_WIN32)
 #include <io.h>
 #define F_OK 0
@@ -81,6 +84,23 @@ void fastLEC::Visualizer::visualize(std::vector<int> unit_clauses)
     fflush(stdout);
 
     // 2. log the right cnf;
+    std::ofstream file(basefilename + ".cnf");
+    file << "p cnf " << cnf->num_vars << " "
+         << cnf->num_clauses() + unit_clauses.size() << std::endl;
+    int start_pos = 0, end_pos = 0;
+    for (int i = 0; i < cnf->num_clauses(); i++)
+    {
+        end_pos = cnf->cls_end_pos[i];
+        for (int j = start_pos; j < end_pos; j++)
+            file << cnf->lits[j] << " ";
+        start_pos = end_pos;
+        file << "0" << std::endl;
+    }
+    for (int l : unit_clauses)
+    {
+        file << l << " 0" << std::endl;
+    }
+    file.close();
 
     // 3. run_cnf
 }
