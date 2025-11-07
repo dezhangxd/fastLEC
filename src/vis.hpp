@@ -21,6 +21,8 @@ public:
     std::string gen_basename_str();
     std::string gen_basename_str(std::vector<int> unit_clauses);
 
+    void call_external_program_for_runtime_generation();
+
     void visualize(std::vector<int> unit_clauses);
 };
 

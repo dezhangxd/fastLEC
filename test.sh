@@ -8,6 +8,8 @@ BUILD_DIR="build"
 
 # ulimit -t 5
 
+rm ./vis/*
+
 # command="-m ES -c 1 -v 2 -t 5 -p ies_u64 1"
 # command="-m pES -c 4 -v 2 -t 20 -p use_pes_pbit 0"
 # command="-m SAT_sweeping -c 4 -v 2 -t 100 -p log_sub_cnfs 1 -p log_dir ./logs/"

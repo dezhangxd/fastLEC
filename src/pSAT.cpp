@@ -647,7 +647,7 @@ int fastLEC::PartitionSAT::split_task_and_submit(
         return ret_cannot_split;
 
     int max_split_num = Param::get().custom_params.gt_max_split;
-    if (father->split_ct() >= max_split_num)
+    if (father->split_ct() >= (unsigned)max_split_num)
         return ret_max_split;
 
     if (q_wait_ids.size() > 0)
@@ -688,7 +688,7 @@ int fastLEC::PartitionSAT::split_task_and_submit(
             break;
     }
 
-    if (father->split_ct() >= max_split_num)
+    if (father->split_ct() >= (unsigned)max_split_num)
         return ret_max_split;
 
     if (!father->is_solved())
