@@ -302,8 +302,7 @@ void fastLEC::PartitionSAT::worker_func(int cpu_id)
                     if (task)
                     {
                         int r = split_task_and_submit(task);
-                        printf("c [split] task = %d, ret = %d\n", task->id, r);
-                        fflush(stdout);
+
                         if (r == ret_father_solved)
                             terminate_task_by_id(task->id);
                     }

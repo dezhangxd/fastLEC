@@ -7,4 +7,4 @@ mpic++ -o mpi_para -O3 -std=c++17 mpi_para.cpp -I../deps/kissat/src -L../deps/ki
 # param2: cube size
 # param2: output runtime log file
 
-mpirun -np 8 ./mpi_para /Users/zhangxd/EC/fastLEC/vis/test_11_TOP6_-54_190.cnf 2 /Users/zhangxd/EC/fastLEC/vis/test_11_TOP6_-54_190_-370.log
+mpirun -np 200 ./mpi_para ../vis/test_11_TOP6.cnf 0 ../vis/test_11_TOP6.log
