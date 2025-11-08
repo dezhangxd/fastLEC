@@ -86,87 +86,77 @@ size_t get_system_memory()
  */
 void calculate_sylvan_sizes(int n_workers, int n_cores, size_t total_memory)
 {
-    // Use at most 70% of total memory for sylvan
-    // Reserve 30% for OS and other processes
-    size_t available_memory = static_cast<size_t>(total_memory * 0.7);
+    if (n_workers <= 0 || n_cores <= 0) n_workers = n_cores = 1; // avoid div0
+    // 计算允许的最大内存，总不超过 n_workers/n_cores * total
+    double parallel_ratio = static_cast<double>(n_workers) / n_cores;
+    double max_available_memory = std::min(total_memory * parallel_ratio, static_cast<double>(total_memory));
+    // 留出10%冗余给系统
+    size_t target_memory = static_cast<size_t>(max_available_memory * 0.9);
 
-    // Memory per byte: 24 bytes per node, 36 bytes per cache bucket
-    // Typical ratio: cache should be 1.5-2x larger than nodes for good
-    // performance Let's allocate: 40% for nodes, 60% for cache
-    size_t nodes_memory = static_cast<size_t>(available_memory * 0.4);
-    size_t cache_memory = static_cast<size_t>(available_memory * 0.6);
+    // 50%给nodes, 50%给cache
+    size_t nodes_memory = target_memory / 2;
+    size_t cache_memory = target_memory - nodes_memory;
 
-    // Calculate maximum sizes (in number of entries)
-    // nodes_max = nodes_memory / 24
-    // cache_max = cache_memory / 36
+    // 计算能拿到多少node和cache
     long long nodes_max_calc = static_cast<long long>(nodes_memory / 24);
     long long cache_max_calc = static_cast<long long>(cache_memory / 36);
 
-    // Convert to power of 2 (find the largest 2^n that fits)
-    auto log2_floor = [](long long x) -> int
-    {
-        if (x <= 0)
-            return 0;
-        int log = 0;
-        while (x > 1)
-        {
-            x >>= 1;
-            log++;
-        }
-        return log;
+    // 转为2的指数（向下取整到 2^n）
+    auto floor_pow2 = [](long long x) -> long long {
+        if (x < 1) return 1;
+        long long res = 1;
+        while (res <= x/2) res <<= 1;
+        return res;
     };
 
-    // Find appropriate 2^n sizes
-    int nodes_max_exp = log2_floor(nodes_max_calc);
-    int cache_max_exp = log2_floor(cache_max_calc);
+    nodes_max_calc = floor_pow2(nodes_max_calc);
+    cache_max_calc = floor_pow2(cache_max_calc);
 
-    // Set reasonable bounds:
-    // Minimum: 1<<20 (small systems)
-    // Maximum: 1<<32 (very large systems, but practical max is 1<<30)
-    nodes_max_exp = std::max(20, std::min(30, nodes_max_exp));
-    cache_max_exp = std::max(20, std::min(30, cache_max_exp));
+    // 初始为最大的1/8, 但至少2^20
+    auto initial_of_max = [](long long maxv) -> long long {
+        long long init = maxv >> 3;
+        if (init < (1LL << 20)) return 1LL << 20;
+        // 转换为2的幂
+        long long res = 1;
+        while (res <= init/2) res <<= 1;
+        return res;
+    };
 
-    // Initial size should be smaller (1/4 to 1/16 of max)
-    // But at least 1<<20 for performance
-    int nodes_initial_exp = std::max(20, nodes_max_exp - 4);
-    int cache_initial_exp = std::max(20, cache_max_exp - 4);
+    long long nodes_initial_calc = std::min(initial_of_max(nodes_max_calc), nodes_max_calc);
+    long long cache_initial_calc = std::min(initial_of_max(cache_max_calc), cache_max_calc);
 
-    // Adjust based on number of workers
-    // More workers may need slightly larger initial size
-    if (n_workers > 8)
-    {
-        nodes_initial_exp = std::min(nodes_initial_exp + 1, nodes_max_exp);
-        cache_initial_exp = std::min(cache_initial_exp + 1, cache_max_exp);
-    }
+    // 合理限制上下界
+    const long long min_entry = 1LL << 20, max_entry = 1LL << 32; // practical upper bound
+    nodes_max_calc = std::max(min_entry, std::min(max_entry, nodes_max_calc));
+    cache_max_calc = std::max(min_entry, std::min(max_entry, cache_max_calc));
+    nodes_initial_calc = std::max(min_entry, std::min(nodes_max_calc, nodes_initial_calc));
+    cache_initial_calc = std::max(min_entry, std::min(cache_max_calc, cache_initial_calc));
 
-    g_nodes_initial = 1LL << nodes_initial_exp;
-    g_nodes_max = 1LL << nodes_max_exp;
-    g_cache_initial = 1LL << cache_initial_exp;
-    g_cache_max = 1LL << cache_max_exp;
+    g_nodes_initial = nodes_initial_calc;
+    g_nodes_max = nodes_max_calc;
+    g_cache_initial = cache_initial_calc;
+    g_cache_max = cache_max_calc;
 
-    // Calculate actual memory usage
-    size_t nodes_mem = 24ULL * g_nodes_max;
-    size_t cache_mem = 36ULL * g_cache_max;
-    double total_mem_gb = (nodes_mem + cache_mem) / (1024.0 * 1024.0 * 1024.0);
+    // 实际内存消耗
+    double nodes_mem_gb = g_nodes_max * 24.0 / (1024 * 1024 * 1024);
+    double cache_mem_gb = g_cache_max * 36.0 / (1024 * 1024 * 1024);
+    double total_mem_gb = nodes_mem_gb + cache_mem_gb;
 
     if (fastLEC::Param::get().verbose > 0)
     {
         printf("c [Sylvan] Configuration: workers=%d, cores=%d, "
-               "total_memory=%.2f GB\n",
-               n_workers,
-               n_cores,
-               total_memory / (1024.0 * 1024.0 * 1024.0));
+               "total_memory=%.2f GB, target_memory=%.2f GB\n",
+               n_workers, n_cores,
+               total_memory / (1024.0 * 1024 * 1024),
+               target_memory / (1024.0 * 1024 * 1024));
         printf("c [Sylvan] Nodes: initial=2^%d (%.2f MB), max=2^%d (%.2f GB)\n",
-               nodes_initial_exp,
-               g_nodes_initial * 24.0 / (1024 * 1024),
-               nodes_max_exp,
-               g_nodes_max * 24.0 / (1024 * 1024 * 1024));
+               (int)std::log2(g_nodes_initial), g_nodes_initial*24.0/(1024*1024),
+               (int)std::log2(g_nodes_max), g_nodes_max*24.0/(1024*1024*1024));
         printf("c [Sylvan] Cache: initial=2^%d (%.2f MB), max=2^%d (%.2f GB)\n",
-               cache_initial_exp,
-               g_cache_initial * 36.0 / (1024 * 1024),
-               cache_max_exp,
-               g_cache_max * 36.0 / (1024 * 1024 * 1024));
-        printf("c [Sylvan] Total allocated memory: %.2f GB\n", total_mem_gb);
+               (int)std::log2(g_cache_initial), g_cache_initial*36.0/(1024*1024),
+               (int)std::log2(g_cache_max), g_cache_max*36.0/(1024*1024*1024));
+        printf("c [Sylvan] Total allocated memory: %.2f GB (limit: %.2f GB, ratio=%.2f)\n",
+               total_mem_gb, max_available_memory/(1024.0*1024*1024), parallel_ratio);
         fflush(stdout);
     }
 }
