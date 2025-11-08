@@ -23,6 +23,15 @@ public:
 
     void call_external_program_for_runtime_generation();
 
+    struct dot_data
+    {
+        std::string dot_filename;
+        double base_runtime;
+        std::vector<double> pos_runtimes, neg_runtimes;
+        std::vector<bool> mask;
+    };
+    void generate_dot(dot_data &dot_data);
+
     void visualize(std::vector<int> unit_clauses);
 };
 

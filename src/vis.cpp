@@ -27,6 +27,8 @@ fastLEC::Visualizer::Visualizer(std::shared_ptr<fastLEC::XAG> xag) : xag(xag)
     cnf->build_watches();
 }
 
+void fastLEC::Visualizer::generate_dot(dot_data &dot_data) {}
+
 std::string fastLEC::Visualizer::gen_basename_str()
 {
     std::string dir_file = Param::get().custom_params.log_dir;
@@ -253,7 +255,7 @@ void fastLEC::Visualizer::visualize(std::vector<int> unit_clauses)
 #endif
     }
 
-    // 4. read log file and get the runtime
+    // 4. read log file and get the runtimes
     double base_runtime = -1.0;
     std::vector<double> pos_runtimes(cnf->num_vars + 1, -1.0);
     std::vector<double> neg_runtimes(cnf->num_vars + 1, -1.0);
@@ -261,14 +263,14 @@ void fastLEC::Visualizer::visualize(std::vector<int> unit_clauses)
     std::string line;
     while (std::getline(log_file, line))
     {
-        // 查找 { ... }
+        // find { ... }
         size_t lbrace = line.find('{');
         size_t rbrace = line.find('}');
         if (lbrace == std::string::npos || rbrace == std::string::npos ||
             rbrace <= lbrace)
             continue;
         std::string content = line.substr(lbrace + 1, rbrace - lbrace - 1);
-        // 查找(time = ... seconds)
+        // find (time = ... seconds)
         size_t time_pos = line.find("time =");
         size_t seconds_pos = line.find("seconds", time_pos);
         double runtime = -1.0;
@@ -285,14 +287,14 @@ void fastLEC::Visualizer::visualize(std::vector<int> unit_clauses)
                 runtime = -1.0;
             }
         }
-        // 如果{}为空则是base
+        // if {} empty, then this is base
         if (content.find_first_not_of(" \t") == std::string::npos)
         {
             base_runtime = runtime;
         }
         else
         {
-            // 提取第一个数，判断正负
+            // find the first number
             int lit = 0;
             size_t first_non_space = content.find_first_not_of(" \t");
             if (first_non_space != std::string::npos)
@@ -337,4 +339,15 @@ void fastLEC::Visualizer::visualize(std::vector<int> unit_clauses)
                neg_runtimes[i]);
         fflush(stdout);
     }
+
+    // 5. generate dot file
+    dot_data dot_data;
+    dot_data.dot_filename = basefilename + ".dot";
+    dot_data.base_runtime = base_runtime;
+    dot_data.pos_runtimes = pos_runtimes;
+    dot_data.neg_runtimes = neg_runtimes;
+    dot_data.mask = mask;
+    generate_dot(dot_data);
+
+    // 6. vis dot file
 }
