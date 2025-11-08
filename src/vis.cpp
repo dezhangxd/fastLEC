@@ -121,9 +121,10 @@ void fastLEC::Visualizer::visualize(std::vector<int> unit_clauses)
         long cpu_cores = sysconf(_SC_NPROCESSORS_ONLN);
         if (cpu_cores > 0)
         {
-            // 计算可用线程数：保留一半CPU核心给其他任务，减去当前使用的线程数
+            // calculate available threads: keep half CPU cores for other tasks,
+            // minus current threads
             available_threads = static_cast<int>(cpu_cores) / 2 - nthread;
-            // 确保至少为1，但不超过200
+            // make sure at least 1 and no more than 200
             if (available_threads <= 0)
                 available_threads = 1;
             if (available_threads > 200)
@@ -131,14 +132,14 @@ void fastLEC::Visualizer::visualize(std::vector<int> unit_clauses)
         }
 #endif
 
-        // 查找 mpi_para 可执行文件的路径
+        // find the path to mpi_para executable
         std::string mpi_para_path = "";
         bool found_mpi_para = false;
 
-        // 尝试多个可能的路径（按优先级排序）
+        // try multiple possible paths (by priority)
         std::vector<std::string> possible_paths;
 
-        // 1. 首先尝试从环境变量获取项目根目录
+        // 1. try from environment variable project root first
         const char *project_root = std::getenv("FASTLEC_ROOT");
         if (project_root != nullptr)
         {
@@ -147,28 +148,29 @@ void fastLEC::Visualizer::visualize(std::vector<int> unit_clauses)
             possible_paths.push_back(env_path);
         }
 
-        // 2. 尝试相对路径（从项目根目录，假设从build/bin运行）
+        // 2. try relative paths (from project root, assuming run from
+        // build/bin)
         possible_paths.push_back("../../toolbox/mpi_para");
         possible_paths.push_back("../toolbox/mpi_para");
 
-        // 3. 尝试从当前工作目录
+        // 3. try from current working directory
         possible_paths.push_back("./toolbox/mpi_para");
         possible_paths.push_back("toolbox/mpi_para");
 
-        // 4. 尝试绝对路径（如果toolbox在项目根目录）
+        // 4. try absolute path if toolbox is in project root
 #if defined(__unix__) || defined(__APPLE__) || defined(__linux__)
         char cwd[PATH_MAX];
         if (getcwd(cwd, sizeof(cwd)) != nullptr)
         {
             std::string cwd_str(cwd);
-            // 如果当前在build/bin目录，向上两级到项目根
+            // if in /build/bin, go up two levels to project root
             if (cwd_str.find("/build/bin") != std::string::npos)
             {
                 size_t pos = cwd_str.find("/build/bin");
                 std::string root = cwd_str.substr(0, pos);
                 possible_paths.push_back(root + "/toolbox/mpi_para");
             }
-            // 如果当前在build目录，向上一级到项目根
+            // if in /build, go up one level to project root
             else if (cwd_str.find("/build") != std::string::npos &&
                      cwd_str.find("/build/bin") == std::string::npos)
             {
@@ -176,7 +178,7 @@ void fastLEC::Visualizer::visualize(std::vector<int> unit_clauses)
                 std::string root = cwd_str.substr(0, pos);
                 possible_paths.push_back(root + "/toolbox/mpi_para");
             }
-            // 如果当前在项目根目录
+            // if in project root directory
             else
             {
                 possible_paths.push_back(cwd_str + "/toolbox/mpi_para");
@@ -184,13 +186,13 @@ void fastLEC::Visualizer::visualize(std::vector<int> unit_clauses)
         }
 #endif
 
-        // 检查每个可能的路径
+        // check each possible path
         for (const auto &path : possible_paths)
         {
             if (access(path.c_str(), F_OK) == 0)
             {
-                // 检查是否为可执行文件
 #if defined(__unix__) || defined(__APPLE__) || defined(__linux__)
+                // check if executable
                 if (access(path.c_str(), X_OK) == 0)
                 {
                     mpi_para_path = path;
@@ -249,5 +251,90 @@ void fastLEC::Visualizer::visualize(std::vector<int> unit_clauses)
                      "this platform."
                   << std::endl;
 #endif
+    }
+
+    // 4. read log file and get the runtime
+    double base_runtime = -1.0;
+    std::vector<double> pos_runtimes(cnf->num_vars + 1, -1.0);
+    std::vector<double> neg_runtimes(cnf->num_vars + 1, -1.0);
+    std::ifstream log_file(basefilename + ".log");
+    std::string line;
+    while (std::getline(log_file, line))
+    {
+        // 查找 { ... }
+        size_t lbrace = line.find('{');
+        size_t rbrace = line.find('}');
+        if (lbrace == std::string::npos || rbrace == std::string::npos ||
+            rbrace <= lbrace)
+            continue;
+        std::string content = line.substr(lbrace + 1, rbrace - lbrace - 1);
+        // 查找(time = ... seconds)
+        size_t time_pos = line.find("time =");
+        size_t seconds_pos = line.find("seconds", time_pos);
+        double runtime = -1.0;
+        if (time_pos != std::string::npos && seconds_pos != std::string::npos)
+        {
+            std::string time_str =
+                line.substr(time_pos + 6, seconds_pos - (time_pos + 6));
+            try
+            {
+                runtime = std::stod(time_str);
+            }
+            catch (...)
+            {
+                runtime = -1.0;
+            }
+        }
+        // 如果{}为空则是base
+        if (content.find_first_not_of(" \t") == std::string::npos)
+        {
+            base_runtime = runtime;
+        }
+        else
+        {
+            // 提取第一个数，判断正负
+            int lit = 0;
+            size_t first_non_space = content.find_first_not_of(" \t");
+            if (first_non_space != std::string::npos)
+            {
+                size_t next_space =
+                    content.find_first_of(" \t", first_non_space);
+                std::string lit_str = content.substr(
+                    first_non_space, next_space - first_non_space);
+                try
+                {
+                    lit = std::stoi(lit_str);
+                    if (lit > 0 && lit < static_cast<int>(pos_runtimes.size()))
+                    {
+                        pos_runtimes[lit] = runtime;
+                    }
+                    else if (lit < 0 &&
+                             -lit < static_cast<int>(neg_runtimes.size()))
+                    {
+                        neg_runtimes[-lit] = runtime;
+                    }
+                }
+                catch (...)
+                {
+                    // ignore parse error
+                }
+            }
+        }
+    }
+    log_file.close();
+
+    printf("base_runtime %f\n", base_runtime);
+    fflush(stdout);
+    for (int i = 1; i <= cnf->num_vars; i++)
+    {
+        if (mask[i])
+        {
+            printf("mask!\n");
+        }
+        printf("var %d: pos_runtime %f, neg_runtime %f\n",
+               i,
+               pos_runtimes[i],
+               neg_runtimes[i]);
+        fflush(stdout);
     }
 }

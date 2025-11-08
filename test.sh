@@ -15,8 +15,8 @@ BUILD_DIR="build"
 # command="-m pBDD -c 32 -t 50"
 # command="-m PPE_sweeping -c 1 -v 2 -t 500 -p log_sub_aiger 1 -p log_dir ./logs/"
 # command="-m PPE_sweeping -c 1 -v 2 -t 500 -p log_features 1 -p log_dir ./logs/"
-command="-m pBDD -c 8 -v 2 -t 100"
-# command="-m pSAT_sweeping -c 8 -v 2 -t 100 -p vis 1 -p log_dir ./vis/"
+# command="-m pBDD -c 8 -v 2 -t 100"
+command="-m pSAT_sweeping -c 8 -v 2 -t 100 -p vis 1 -p log_dir ./vis/"
 
 
 # rm -rf *.aig
