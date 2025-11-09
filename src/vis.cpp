@@ -12,6 +12,7 @@
 #include <iostream>
 #include <mutex>
 #include <iomanip>
+#include <algorithm>
 
 #if defined(_WIN32)
 #include <io.h>
@@ -22,6 +23,112 @@
 #include <unistd.h>
 #include <libgen.h>
 #endif
+
+void fastLEC::Visualizer::re_compute_scores(dot_data &dot_data)
+{
+    this->xag->compute_XOR_chains(
+        dot_data.mask, dot_data.XOR_chains, dot_data.important_nodes);
+
+    dot_data.is_important.clear();
+    dot_data.is_important.resize(cnf->num_vars, false);
+    for (auto &d : dot_data.important_nodes)
+        for (auto v : d)
+            dot_data.is_important[v] = true;
+
+    this->xag->compute_distance(dot_data.mask,
+                                dot_data.in_degree,
+                                dot_data.out_degree,
+                                dot_data.idis,
+                                dot_data.odis);
+
+    dot_data.scores.clear();
+    dot_data.scores.resize(this->cnf->num_vars + 1, 1.0);
+
+    for (unsigned i = 0; i < dot_data.XOR_chains.size(); i++)
+    {
+        for (auto v : dot_data.XOR_chains[i])
+        {
+            double alpha = 0.6;
+            double dis =
+                alpha * dot_data.odis[v] + (1 - alpha) * dot_data.idis[v] + 1.0;
+            dot_data.scores[v] = std::pow(dot_data.XOR_chains[i].size(), 2.0) *
+                log2(this->cnf->num_vars) / dis;
+        }
+        for (auto v : dot_data.important_nodes[i])
+        {
+            dot_data.scores[v] *= 5.0;
+        }
+    }
+
+    int prop_lev = 2;
+    double beta = 10.0;
+    for (int i = 0; i < prop_lev; i++)
+    {
+        std::vector<double> score_bac = dot_data.scores;
+        for (int v = 1; v <= this->cnf->num_vars; v++)
+        {
+            if (!dot_data.mask[v])
+            {
+                double sum = 0.0;
+                double cnt = 0;
+                for (auto u : this->xag->v_usr[v])
+                {
+                    if (!dot_data.mask[u])
+                    {
+                        sum += score_bac[u];
+                        cnt += 1;
+                    }
+                }
+                int i1 = aiger_var(this->xag->gates[v].inputs[0]);
+                int i2 = aiger_var(this->xag->gates[v].inputs[1]);
+                if (!dot_data.mask[i1])
+                {
+                    sum += score_bac[i1];
+                    cnt += 1;
+                }
+                if (!dot_data.mask[i2])
+                {
+                    sum += score_bac[i2];
+                    cnt += 1;
+                }
+
+                sum += beta * cnt * score_bac[v];
+                cnt += beta * cnt;
+
+                dot_data.scores[v] = sum / cnt;
+            }
+        }
+    }
+
+    // Calculate the rank of each variable according to scores and store in
+    // dot_data.score_rank
+    int n_vars = this->cnf->num_vars;
+    dot_data.score_rank.clear();
+    dot_data.score_rank.resize(n_vars + 1, 0);
+
+    // Create vector of pairs (score, variable id)
+    std::vector<std::pair<double, int>> score_with_idx;
+    for (int v = 1; v <= n_vars; v++)
+    {
+        score_with_idx.emplace_back(dot_data.scores[v], v);
+    }
+
+    // Sort descending by score (higher score = higher rank)
+    std::sort(
+        score_with_idx.begin(),
+        score_with_idx.end(),
+        [](const std::pair<double, int> &a, const std::pair<double, int> &b)
+        {
+            return a.first > b.first;
+        });
+
+    // Assign rank: rank 1 for highest score, 2 for next, etc.
+    for (int rank = 0; rank < (int)score_with_idx.size(); ++rank)
+    {
+        int v = score_with_idx[rank].second;
+        dot_data.score_rank[v] = rank + 1;
+    }
+}
 
 fastLEC::Visualizer::Visualizer(std::shared_ptr<fastLEC::XAG> xag) : xag(xag)
 {
@@ -41,20 +148,24 @@ void fastLEC::Visualizer::generate_dot(dot_data &dot_data)
     std::vector<bool> should_vis(cnf->num_vars + 1, true);
 
     // --------------------------------
+
+    dot_data.scores.resize(cnf->num_vars + 1, 0.0);
+    dot_data.speedups.resize(cnf->num_vars + 1, 0.0);
+    this->re_compute_scores(dot_data);
+
     for (int v = 1; v <= cnf->num_vars; v++)
     {
         std::stringstream ss;
         double speedup_value = dot_data.base_runtime /
             std::max(dot_data.pos_runtimes[v], dot_data.neg_runtimes[v]);
+        dot_data.speedups[v] = speedup_value;
         ss << std::fixed << std::setprecision(3) << speedup_value;
         std::string speedup = ss.str();
 
         std::string fillcolor = "white";
         if (speedup_value < 1.0)
             fillcolor = "#FFFFFF"; // while
-        else if (speedup_value >= 1.0 && speedup_value < 1.25)
-            fillcolor = "#F0F0F0"; // light gray
-        else if (speedup_value >= 1.25 && speedup_value < 1.5)
+        else if (speedup_value >= 1.05 && speedup_value < 1.5)
             fillcolor = "#FFD700"; // yellow
         else if (speedup_value >= 1.5 && speedup_value < 2.0)
             fillcolor = "#90EE90"; // light green
@@ -75,19 +186,19 @@ void fastLEC::Visualizer::generate_dot(dot_data &dot_data)
         if (xag->gates[v].type == fastLEC::GateType::XOR2)
         {
             prefix = "XOR_";
-            penwidth = 5.0;
+            penwidth = 6.0;
             style = "filled,bold";
         }
         else if (xag->gates[v].type == fastLEC::GateType::AND2)
         {
             prefix = "AND_";
-            penwidth = 5.0;
+            penwidth = 2.0;
             style = "filled,bold,dashed";
         }
         else if (xag->gates[v].type == fastLEC::GateType::PI)
         {
             prefix = "PI_";
-            penwidth = 2.0;
+            penwidth = 1.0;
             style = "filled,bold,rounded,dashed";
         }
 
@@ -106,8 +217,17 @@ void fastLEC::Visualizer::generate_dot(dot_data &dot_data)
             ts << prefix << v << "<-"
                << std::to_string(i1) + "," + std::to_string(i2) << "\\n";
 
-        ts << "speedup:" << std::fixed << std::setprecision(2) << speedup_value
-           << "x\\n";
+        ts << "sp:" << std::fixed << std::setprecision(2)
+           << dot_data.speedups[v] << "x\\n";
+
+        ts << "scr:" << std::fixed << std::setprecision(2)
+           << dot_data.score_rank[v] << "\\n";
+
+        ts << "cut-point ? " << (dot_data.is_important[v] ? "Y" : "N") << "\\n";
+
+        ts << "IO-dis=" << dot_data.idis[v] << "+" << dot_data.odis[v] << "="
+           << dot_data.idis[v] + dot_data.odis[v]
+           << ", deg=" << dot_data.out_degree[v] << "\\n";
 
         fout << "  " << v << " [label=\"" << ts.str() << "\""
              << ", style=\"" << style << "\""

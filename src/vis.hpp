@@ -29,7 +29,17 @@ public:
         double base_runtime;
         std::vector<double> pos_runtimes, neg_runtimes;
         std::vector<bool> mask;
+
+        // related to scores
+        std::vector<double> speedups, scores;
+        std::vector<int> score_rank;
+        std::vector<std::vector<int>> XOR_chains, important_nodes;
+        std::vector<bool> is_important;
+        std::vector<int> in_degree, out_degree, idis, odis;
     };
+
+    void re_compute_scores(dot_data &dot_data);
+
     void generate_dot(dot_data &dot_data);
 
     void visualize(std::vector<int> unit_clauses);
