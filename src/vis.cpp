@@ -4,12 +4,14 @@
 
 #include <cstdio>
 #include <fstream>
+#include <sstream>
 #include <cstdlib>
 #include <limits.h>
 #include <vector>
 #include <string>
 #include <iostream>
 #include <mutex>
+#include <iomanip>
 
 #if defined(_WIN32)
 #include <io.h>
@@ -27,7 +29,156 @@ fastLEC::Visualizer::Visualizer(std::shared_ptr<fastLEC::XAG> xag) : xag(xag)
     cnf->build_watches();
 }
 
-void fastLEC::Visualizer::generate_dot(dot_data &dot_data) {}
+void fastLEC::Visualizer::generate_dot(dot_data &dot_data)
+{
+    std::ofstream fout(dot_data.dot_filename);
+    fout << "digraph G {\n";
+    fout << "  rankdir=LR;\n";
+    fout << "  node [shape=box, style=filled];\n";
+    fout << "  edge [arrowhead=vee];\n\n";
+    // -----------------------------
+    // update visualization data
+    std::vector<bool> should_vis(cnf->num_vars + 1, true);
+
+    // --------------------------------
+    for (int v = 1; v <= cnf->num_vars; v++)
+    {
+        std::stringstream ss;
+        double speedup_value = dot_data.base_runtime /
+            std::max(dot_data.pos_runtimes[v], dot_data.neg_runtimes[v]);
+        ss << std::fixed << std::setprecision(3) << speedup_value;
+        std::string speedup = ss.str();
+
+        std::string fillcolor = "white";
+        if (speedup_value < 1.0)
+            fillcolor = "#FFFFFF"; // while
+        else if (speedup_value >= 1.0 && speedup_value < 1.25)
+            fillcolor = "#F0F0F0"; // light gray
+        else if (speedup_value >= 1.25 && speedup_value < 1.5)
+            fillcolor = "#FFD700"; // yellow
+        else if (speedup_value >= 1.5 && speedup_value < 2.0)
+            fillcolor = "#90EE90"; // light green
+        else if (speedup_value >= 2.0 && speedup_value < 3.0)
+            fillcolor = "#87CEEB"; // sky blue
+        else if (speedup_value >= 3.0 && speedup_value < 4.0)
+            fillcolor = "#FF6B6B"; // red
+        else if (speedup_value >= 4.0)
+            fillcolor = "#8B008B"; // deep purple
+
+        std::string prefix = "";
+        double penwidth = 5.0;
+        std::string style = "filled,bold";
+        std::string fontcolor = "black";
+        std::string shape = "box";
+        std::string bordercolor = "black";
+
+        if (xag->gates[v].type == fastLEC::GateType::XOR2)
+        {
+            prefix = "XOR_";
+            penwidth = 5.0;
+            style = "filled,bold";
+        }
+        else if (xag->gates[v].type == fastLEC::GateType::AND2)
+        {
+            prefix = "AND_";
+            penwidth = 5.0;
+            style = "filled,bold,dashed";
+        }
+        else if (xag->gates[v].type == fastLEC::GateType::PI)
+        {
+            prefix = "PI_";
+            penwidth = 2.0;
+            style = "filled,bold,rounded,dashed";
+        }
+
+        if (should_vis[v] == false)
+        {
+            style = "invis";
+        }
+
+        int i1 = aiger_var(xag->gates[v].inputs[0]);
+        int i2 = aiger_var(xag->gates[v].inputs[1]);
+
+        std::stringstream ts;
+        if (xag->gates[v].type == fastLEC::GateType::PI)
+            ts << prefix << v << "\\n";
+        else
+            ts << prefix << v << "<-"
+               << std::to_string(i1) + "," + std::to_string(i2) << "\\n";
+
+        ts << "speedup:" << std::fixed << std::setprecision(2) << speedup_value
+           << "x\\n";
+
+        fout << "  " << v << " [label=\"" << ts.str() << "\""
+             << ", style=\"" << style << "\""
+             << ", fillcolor=\"" << fillcolor << "\""
+             << ", color=\"" << bordercolor << "\""
+             << ", penwidth=" << penwidth << ", fontcolor=\"" << fontcolor
+             << "\""
+             << ", fontname=\"bold\""
+             << ", shape=\"" << shape << "\"];\n";
+    }
+
+    fout << "\n";
+
+    // Add edges between gates with negative indicators
+    for (int gid : xag->used_gates)
+    {
+        Gate &gate = xag->gates[gid];
+        if (gate.type != fastLEC::GateType::PI)
+        {
+            // First input
+
+            int v_i1 = aiger_var(gate.inputs[0]);
+            int v_i2 = aiger_var(gate.inputs[1]);
+            int v_o = aiger_var(gate.output);
+
+            int l_i1 = aiger_sign(gate.inputs[0]) ? -v_i1 : v_i1;
+            int l_i2 = aiger_sign(gate.inputs[1]) ? -v_i2 : v_i2;
+
+            fout << "  " << v_i1 << " -> " << v_o;
+            if (l_i1 < 0)
+            {
+                if (should_vis[v_i1] == false || should_vis[v_o] == false)
+                    fout
+                        << " [headlabel=\"●\", labeldistance=0.5, style=invis]";
+                else
+                    fout << " [headlabel=\"●\", labeldistance=0.5]";
+            }
+            else
+            {
+                if (should_vis[v_i1] == false || should_vis[v_o] == false)
+                    fout << " [labeldistance=0.5, style=invis]";
+                else
+                    fout << " [labeldistance=0.5]";
+            }
+            fout << ";\n";
+
+            // Second input
+            fout << "  " << v_i2 << " -> " << v_o;
+            if (l_i2 < 0)
+            {
+                if (should_vis[v_i2] == false || should_vis[v_o] == false)
+                    fout
+                        << " [headlabel=\"●\", labeldistance=0.5, style=invis]";
+                else
+                    fout << " [headlabel=\"●\", labeldistance=0.5]";
+            }
+            else
+            {
+                if (should_vis[v_i2] == false || should_vis[v_o] == false)
+                    fout << " [labeldistance=0.5, style=invis]";
+                else
+                    fout << " [labeldistance=0.5]";
+            }
+            fout << ";\n";
+        }
+    }
+
+    fout << "}\n";
+
+    fout.close();
+}
 
 std::string fastLEC::Visualizer::gen_basename_str()
 {
@@ -325,21 +476,6 @@ void fastLEC::Visualizer::visualize(std::vector<int> unit_clauses)
     }
     log_file.close();
 
-    printf("base_runtime %f\n", base_runtime);
-    fflush(stdout);
-    for (int i = 1; i <= cnf->num_vars; i++)
-    {
-        if (mask[i])
-        {
-            printf("mask!\n");
-        }
-        printf("var %d: pos_runtime %f, neg_runtime %f\n",
-               i,
-               pos_runtimes[i],
-               neg_runtimes[i]);
-        fflush(stdout);
-    }
-
     // 5. generate dot file
     dot_data dot_data;
     dot_data.dot_filename = basefilename + ".dot";
@@ -350,4 +486,11 @@ void fastLEC::Visualizer::visualize(std::vector<int> unit_clauses)
     generate_dot(dot_data);
 
     // 6. vis dot file
+    std::string pdf_filename = basefilename + ".pdf";
+    int ret = system(
+        ("dot -Tpdf " + dot_data.dot_filename + " -o " + pdf_filename).c_str());
+    if (ret != 0)
+    {
+        std::cerr << "Failed to generate PDF file" << std::endl;
+    }
 }
