@@ -114,6 +114,11 @@ public:
 
     void compute_simulation_features(std::vector<double> &one_percentages,
                                      std::vector<double> &entropys);
+
+    void compute_n_step_XOR_cnt(const std::vector<bool> &mask,
+                                std::vector<std::vector<int>> &n_step_XOR_cnt,
+                                std::vector<std::vector<int>> &n_step_Gates_cnt,
+                                int steps);
     //---------------------------------------------------
     // XAG useless variable elimination and remapping
     //---------------------------------------------------

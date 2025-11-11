@@ -32,10 +32,11 @@ public:
 
         // related to scores
         std::vector<double> speedups, scores;
-        std::vector<int> score_rank;
+        std::vector<int> speedup_rank, score_rank;
         std::vector<std::vector<int>> XOR_chains, important_nodes;
         std::vector<bool> is_important;
         std::vector<int> in_degree, out_degree, idis, odis;
+        std::vector<std::vector<int>> n_step_XOR_cnt, n_step_Gates_cnt;
     };
 
     void re_compute_scores(dot_data &dot_data);

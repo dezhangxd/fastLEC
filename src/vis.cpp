@@ -128,6 +128,39 @@ void fastLEC::Visualizer::re_compute_scores(dot_data &dot_data)
         int v = score_with_idx[rank].second;
         dot_data.score_rank[v] = rank + 1;
     }
+
+    // Calculate the rank of each variable according to speedups and store in
+    // dot_data.speedup_rank
+    dot_data.speedup_rank.clear();
+    dot_data.speedup_rank.resize(n_vars + 1, 0);
+
+    // Create vector of pairs (speedup, variable id)
+    std::vector<std::pair<double, int>> speedup_with_idx;
+    for (int v = 1; v <= n_vars; v++)
+    {
+        speedup_with_idx.emplace_back(
+            (dot_data.neg_runtimes[v] > 0.0 && dot_data.pos_runtimes[v] > 0.0)
+                ? (dot_data.base_runtime /
+                   std::max(dot_data.pos_runtimes[v], dot_data.neg_runtimes[v]))
+                : -1e9,
+            v);
+    }
+
+    // Sort descending by speedup (higher speedup = higher rank)
+    std::sort(
+        speedup_with_idx.begin(),
+        speedup_with_idx.end(),
+        [](const std::pair<double, int> &a, const std::pair<double, int> &b)
+        {
+            return a.first > b.first;
+        });
+
+    // Assign rank: rank 1 for highest speedup, 2 for next, etc.
+    for (int rank = 0; rank < (int)speedup_with_idx.size(); ++rank)
+    {
+        int v = speedup_with_idx[rank].second;
+        dot_data.speedup_rank[v] = rank + 1;
+    }
 }
 
 fastLEC::Visualizer::Visualizer(std::shared_ptr<fastLEC::XAG> xag) : xag(xag)
@@ -143,15 +176,34 @@ void fastLEC::Visualizer::generate_dot(dot_data &dot_data)
     fout << "  rankdir=LR;\n";
     fout << "  node [shape=box, style=filled];\n";
     fout << "  edge [arrowhead=vee];\n\n";
-    // -----------------------------
-    // update visualization data
-    std::vector<bool> should_vis(cnf->num_vars + 1, true);
-
-    // --------------------------------
-
     dot_data.scores.resize(cnf->num_vars + 1, 0.0);
     dot_data.speedups.resize(cnf->num_vars + 1, 0.0);
     this->re_compute_scores(dot_data);
+    this->xag->compute_n_step_XOR_cnt(
+        dot_data.mask, dot_data.n_step_XOR_cnt, dot_data.n_step_Gates_cnt, 10);
+
+    // -----------------------------
+    // update visualization data
+    std::vector<bool> should_vis(cnf->num_vars + 1, false);
+    for (int v = 1; v <= cnf->num_vars; v++)
+    {
+        if (((dot_data.n_step_XOR_cnt[0][v] +
+              (dot_data.n_step_Gates_cnt[0][v] -
+               dot_data.n_step_XOR_cnt[0][v]) /
+                  4) >= 1) &&
+            ((dot_data.n_step_XOR_cnt[1][v] +
+              (dot_data.n_step_Gates_cnt[1][v] -
+               dot_data.n_step_XOR_cnt[1][v]) /
+                  4) >= 2) &&
+            ((dot_data.n_step_XOR_cnt[2][v] +
+              (dot_data.n_step_Gates_cnt[2][v] -
+               dot_data.n_step_XOR_cnt[2][v]) /
+                  4) >= 3))
+        {
+            should_vis[v] = true;
+        }
+    }
+    // --------------------------------
 
     for (int v = 1; v <= cnf->num_vars; v++)
     {
@@ -202,6 +254,11 @@ void fastLEC::Visualizer::generate_dot(dot_data &dot_data)
             style = "filled,bold,rounded,dashed";
         }
 
+        if (dot_data.score_rank[v] <= 10)
+        {
+            bordercolor = "red";
+        }
+
         if (should_vis[v] == false)
         {
             style = "invis";
@@ -218,10 +275,19 @@ void fastLEC::Visualizer::generate_dot(dot_data &dot_data)
                << std::to_string(i1) + "," + std::to_string(i2) << "\\n";
 
         ts << "sp:" << std::fixed << std::setprecision(2)
-           << dot_data.speedups[v] << "x\\n";
+           << dot_data.speedups[v] << "x, rk=" << dot_data.speedup_rank[v]
+           << "\\n";
 
-        ts << "scr:" << std::fixed << std::setprecision(2)
-           << dot_data.score_rank[v] << "\\n";
+        ts << "scr:" << std::fixed << std::setprecision(2) << dot_data.scores[v]
+           << ", rk=" << dot_data.score_rank[v] << "\\n";
+
+        ts << "X/G:";
+        for (int step = 0; step <= 5; step++)
+        {
+            ts << dot_data.n_step_XOR_cnt[step][v] << "/"
+               << dot_data.n_step_Gates_cnt[step][v] << ",";
+        }
+        ts << "\\n";
 
         ts << "cut-point ? " << (dot_data.is_important[v] ? "Y" : "N") << "\\n";
 
@@ -613,4 +679,7 @@ void fastLEC::Visualizer::visualize(std::vector<int> unit_clauses)
     {
         std::cerr << "Failed to generate PDF file" << std::endl;
     }
+
+    // 7. exit?
+    exit(0);
 }

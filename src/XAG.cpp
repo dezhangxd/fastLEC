@@ -15,6 +15,7 @@ extern "C"
 #include <stdexcept>
 #include <algorithm>
 #include <queue>
+#include <unordered_set>
 
 // #define PRT_DEBUG_XAG
 
@@ -904,6 +905,67 @@ std::shared_ptr<fastLEC::AIG> XAG::construct_aig_from_this_xag()
     return aig;
 }
 
+void fastLEC::XAG::compute_n_step_XOR_cnt(
+    const std::vector<bool> &mask,
+    std::vector<std::vector<int>> &n_step_XOR_cnt,
+    std::vector<std::vector<int>> &n_step_Gates_cnt,
+    int n_steps)
+{
+    n_step_XOR_cnt.resize(n_steps + 1, std::vector<int>(this->max_var + 1, 0));
+    n_step_Gates_cnt.resize(n_steps + 1,
+                            std::vector<int>(this->max_var + 1, 0));
+
+    std::vector<std::unordered_set<int>> v_neighbors(this->max_var + 1);
+    for (int v = 1; v <= this->max_var; v++)
+    {
+        if (mask[v])
+            continue;
+
+        const Gate &g = this->gates[v];
+        if (g.type == GateType::XOR2)
+        {
+            n_step_XOR_cnt[0][v] = 1;
+        }
+        n_step_Gates_cnt[0][v] = 1;
+        v_neighbors[v].insert(v);
+    }
+
+    for (int step = 1; step <= n_steps; step++)
+    {
+        for (int v = 1; v <= this->max_var; v++)
+        {
+            if (mask[v])
+                continue;
+
+            std::unordered_set<int> new_neighbors(v_neighbors[v]);
+            for (int i : v_neighbors[v])
+            {
+                auto &g = this->gates[i];
+                int v1 = aiger_var(g.inputs[0]);
+                int v2 = aiger_var(g.inputs[1]);
+
+                if (!mask[v1])
+                {
+                    new_neighbors.insert(v1);
+                }
+
+                if (!mask[v2])
+                {
+                    new_neighbors.insert(v2);
+                }
+            }
+            v_neighbors[v] = new_neighbors;
+            n_step_Gates_cnt[step][v] = new_neighbors.size();
+            n_step_XOR_cnt[step][v] = 0;
+            for (int i : new_neighbors)
+            {
+                if (this->gates[i].type == GateType::XOR2)
+                    n_step_XOR_cnt[step][v]++;
+            }
+        }
+    }
+}
+
 void fastLEC::XAG::compute_distance(const std::vector<bool> &mask,
                                     std::vector<int> &in_degree,
                                     std::vector<int> &out_degree,
@@ -919,7 +981,10 @@ void fastLEC::XAG::compute_distance(const std::vector<bool> &mask,
     for (int v = 1; v <= this->max_var; v++)
     {
         if (mask[v])
+        {
+            idis[v] = odis[v] = 0;
             continue;
+        }
 
         const Gate &g = this->gates[v];
         if (g.type == GateType::AND2 || g.type == GateType::XOR2)
