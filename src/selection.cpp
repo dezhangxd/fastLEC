@@ -41,8 +41,8 @@ fastLEC::Prover::select_one_engine_hybridCEC(std::shared_ptr<fastLEC::XAG> xag)
 }
 
 std::vector<int>
-fastLEC::Prover::select_para_threads(std::shared_ptr<fastLEC::XAG> xag,
-                                     int n_threads)
+fastLEC::Prover::select_heuristic_threads(std::shared_ptr<fastLEC::XAG> xag,
+                                          int n_threads)
 {
     if (xag->PI.size() <= 6)
         return {1, 0, 0}; // small instances using fast SAT check
@@ -109,6 +109,25 @@ fastLEC::Prover::select_para_threads(std::shared_ptr<fastLEC::XAG> xag,
     }
 
     return {SAT_threads, ES_threads, BDD_threads};
+}
+
+std::vector<int>
+fastLEC::Prover::select_schedule_threads(std::shared_ptr<fastLEC::XAG> xag,
+                                         int n_threads)
+{
+    return select_heuristic_threads(xag, n_threads);
+}
+
+std::vector<int>
+fastLEC::Prover::select_half_threads(std::shared_ptr<fastLEC::XAG> xag,
+                                     int n_threads)
+{
+    int n_threads_SAT = std::max(1, n_threads / 2);
+    int n_threads_ES = std::max(0, n_threads - n_threads_SAT);
+    int n_threads_BDD = 0;
+    if (n_threads_ES > 1)
+        n_threads_ES -= 1, n_threads_BDD = 1;
+    return {n_threads_SAT, n_threads_BDD, n_threads_BDD};
 }
 
 std::vector<double> fastLEC::XAG::generate_features()

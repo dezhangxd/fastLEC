@@ -112,13 +112,22 @@ public:
 
     // portfolio engines for CEC
     fastLEC::ret_vals para_portfolios(std::shared_ptr<fastLEC::XAG> xag,
-                                      int n_t = 1);
+                                      int n_threads = 1);
 
     // select engine for CEC
     fastLEC::engines
     select_one_engine_hybridCEC(std::shared_ptr<fastLEC::XAG> xag);
 
-    std::vector<int> select_para_threads(std::shared_ptr<fastLEC::XAG> xag,
+    // heuristic selection: PPE sweeping
+    std::vector<int> select_heuristic_threads(std::shared_ptr<fastLEC::XAG> xag,
+                                              int n_threads);
+
+    // decision tree selection: schedule sweeping
+    std::vector<int> select_schedule_threads(std::shared_ptr<fastLEC::XAG> xag,
+                                             int n_threads);
+
+    // decision tree selection: schedule sweeping
+    std::vector<int> select_half_threads(std::shared_ptr<fastLEC::XAG> xag,
                                          int n_threads);
 
     //---------------------------------------------------

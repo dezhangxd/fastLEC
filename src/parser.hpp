@@ -39,6 +39,7 @@ enum engines
     X(hybrid_sweeping)                                                         \
     X(p_hybrid_sweeping)                                                       \
     X(half_sweeping)                                                           \
+    X(schedule_sweeping)                                                       \
     X(PPE_sweeping) // parallel portfolio engine sweeping
 
 // User-defined parameters macro with descriptions

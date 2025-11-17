@@ -405,107 +405,32 @@ fastLEC::ret_vals Prover::para_SAT_pSAT(std::shared_ptr<fastLEC::XAG> xag,
 }
 
 fastLEC::ret_vals
-fastLEC::Prover::run_half_sweeping(std::shared_ptr<fastLEC::XAG> xag,
-                                   int n_threads)
-{
-    double start_time = fastLEC::ResMgr::get().get_runtime();
-
-    int n_threads_SAT = std::max(1, n_threads / 2);
-    int n_threads_ES = std::max(1, n_threads - n_threads_SAT);
-    int n_threads_BDD = 0;
-    if (n_threads_ES > 1)
-        n_threads_ES -= 1, n_threads_BDD = 1;
-
-    printf("c [Half] threads = {%d, %d, %d}\n",
-           n_threads_SAT,
-           n_threads_ES,
-           n_threads_BDD);
-    fflush(stdout);
-
-    fastLEC::ret_vals ret_half = ret_vals::ret_UNK;
-    fastLEC::ret_vals ret_SAT = ret_vals::ret_UNK;
-    fastLEC::ret_vals ret_ES = ret_vals::ret_UNK;
-    fastLEC::ret_vals ret_BDD = ret_vals::ret_UNK;
-
-    global_solved_for_PPE.store(false);
-
-    std::thread func_SAT(
-        [&]()
-        {
-            if (n_threads_SAT > 0)
-            {
-                ret_SAT =
-                    para_SAT_pSAT(xag, static_cast<unsigned>(n_threads_SAT));
-                if (ret_SAT != ret_vals::ret_UNK)
-                    global_solved_for_PPE.store(true);
-            }
-        });
-
-    std::thread func_ES(
-        [&]()
-        {
-            if (n_threads_ES > 0)
-            {
-                ret_ES = para_ES(xag, static_cast<unsigned>(n_threads_ES));
-                if (ret_ES != ret_vals::ret_UNK)
-                    global_solved_for_PPE.store(true);
-            }
-        });
-
-    std::thread func_BDD(
-        [&]()
-        {
-            if (n_threads_BDD > 0)
-            {
-                // printf("c enter BDD\n");
-                // fflush(stdout);
-                ret_BDD = seq_BDD_cudd(xag);
-                // printf("c exit BDD\n");
-                // fflush(stdout);
-                if (ret_BDD != ret_vals::ret_UNK)
-                    global_solved_for_PPE.store(true);
-            }
-        });
-
-    func_SAT.join();
-    func_ES.join();
-    func_BDD.join();
-
-    if (ret_SAT == ret_vals::ret_SAT || ret_ES == ret_vals::ret_SAT ||
-        ret_BDD == ret_vals::ret_SAT)
-        ret_half = ret_vals::ret_SAT;
-    else if (ret_SAT == ret_vals::ret_UNS || ret_ES == ret_vals::ret_UNS ||
-             ret_BDD == ret_vals::ret_UNS)
-        ret_half = ret_vals::ret_UNS;
-    else
-        ret_half = ret_vals::ret_UNK;
-
-    if (fastLEC::Param::get().verbose > 0)
-    {
-        printf("c [Half] result = %d "
-               "{SAT: %d (%d t), ES: %d (%d t), BDD: %d (%d t)} "
-               "[time = %.2f s]\n",
-               ret_half,
-               ret_SAT,
-               n_threads_SAT,
-               ret_ES,
-               n_threads_ES,
-               ret_BDD,
-               n_threads_BDD,
-               fastLEC::ResMgr::get().get_runtime() - start_time);
-        fflush(stdout);
-    }
-
-    return ret_half;
-}
-
-fastLEC::ret_vals
 fastLEC::Prover::para_portfolios(std::shared_ptr<fastLEC::XAG> xag, int n_t)
 {
     double start_time = fastLEC::ResMgr::get().get_runtime();
-    std::vector<int> threads = select_para_threads(xag, n_t);
 
-    printf("c [Portfolio] threads = {%d, %d, %d}\n",
+    std::string tag = "";
+    std::vector<int> threads;
+    if (Param::get().mode == Mode::PPE_sweeping)
+    {
+        threads = select_heuristic_threads(xag, n_t);
+        tag = "PPE";
+    }
+    else if (Param::get().mode == Mode::schedule_sweeping)
+    {
+        threads = select_schedule_threads(xag, n_t);
+        tag = "Schedule";
+    }
+    else if (Param::get().mode == Mode::half_sweeping)
+    {
+        threads = select_half_threads(xag, n_t);
+        tag = "Half";
+    }
+    else
+        threads = {n_t, 0, 0};
+
+    printf("c [%s] threads = {%d, %d, %d}\n",
+           tag.c_str(),
            threads[0],
            threads[1],
            threads[2]);
@@ -575,9 +500,10 @@ fastLEC::Prover::para_portfolios(std::shared_ptr<fastLEC::XAG> xag, int n_t)
 
     if (fastLEC::Param::get().verbose > 0)
     {
-        printf("c [Portfolio] result = %d "
+        printf("c [%s] result = %d "
                "{SAT: %d (%d t), ES: %d (%d t), BDD: %d (%d t)} "
                "[time = %.2f s]\n",
+               tag.c_str(),
                ret_portfolios,
                ret_SAT,
                threads[0],
@@ -665,7 +591,12 @@ Prover::run_sweeping(std::shared_ptr<fastLEC::Sweeper> sweeper)
         }
         case Mode::half_sweeping:
         {
-            ret = run_half_sweeping(sub_graph, Param::get().n_threads);
+            ret = para_portfolios(sub_graph, Param::get().n_threads);
+            break;
+        }
+        case Mode::schedule_sweeping:
+        {
+            ret = para_portfolios(sub_graph, Param::get().n_threads);
             break;
         }
         case Mode::PPE_sweeping:
