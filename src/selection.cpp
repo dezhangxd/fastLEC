@@ -115,7 +115,111 @@ std::vector<int>
 fastLEC::Prover::select_schedule_threads(std::shared_ptr<fastLEC::XAG> xag,
                                          int n_threads)
 {
-    return select_heuristic_threads(xag, n_threads);
+
+    if (xag->PI.size() <= 6)
+        return {1, 0, 0}; // small instances using fast SAT check
+
+    if (xag->PI.size() <= 18 + log2(n_threads))
+        return {0, 1, 0}; // small instances that ES is fast enough
+
+    if (n_threads == 1) // fast select one engine
+    {
+        if (select_one_engine_hybridCEC(xag) == fastLEC::engines::engine_seq_ES)
+            return {0, 1, 0};
+        else
+            return {1, 0, 0};
+    }
+
+    // if (xag->PI.size() >=
+    //     36 + log2(n_threads)) // ES cannot handle within cutoff
+    // {
+    //     if (n_threads > 1)
+    //         return {n_threads - 1, 0, 1};
+    //     else
+    //         return {1, 0, 0};
+    // }
+
+    if (!constructed)
+    {
+        if (XGBoosterCreate(nullptr, 0, &booster_sat) != 0)
+        {
+            std::cout << "c [Error] Failed to create booster" << std::endl;
+            exit(0);
+        }
+
+        // Change the model file here.
+        if (XGBoosterLoadModel(booster_sat, "src/model_sat.json") != 0)
+        {
+            std::cout << "c [Error] Failed to load SAT model" << std::endl;
+            exit(0);
+        }
+
+        if (XGBoosterCreate(nullptr, 0, &booster_bdd) != 0)
+        {
+            std::cout << "c [Error] Failed to create booster" << std::endl;
+            exit(0);
+        }
+
+        // Change the model file here.
+        if (XGBoosterLoadModel(booster_bdd, "src/model_bdd.json") != 0)
+        {
+            std::cout << "c [Error] Failed to load BDD model" << std::endl;
+            exit(0);
+        }
+
+        constructed = true;
+    }
+
+    // need to allocate instances
+    int SAT_threads = 1;
+    int ES_threads = 1;
+    int BDD_threads = 1; // at most one thread
+
+    std::vector<double> features_double = xag->generate_features();
+    std::vector<float> features(features_double.begin(), features_double.end());
+    features.emplace_back(1.0); // predict 1 thread efficiency
+
+    if (XGDMatrixCreateFromMat(features.data(), 1, 36, -1e8, &dtest_sat) != 0)
+    {
+        std::cout << "c [Error] Failed to create DMatrix" << std::endl;
+        exit(0);
+    }
+
+    if (XGDMatrixCreateFromMat(features.data(), 1, 36, -1e8, &dtest_bdd) != 0)
+    {
+        std::cout << "c [Error] Failed to create DMatrix" << std::endl;
+        exit(0);
+    }
+
+    bst_ulong out_len;
+    const float *out_result_sat = nullptr;
+    const float *out_result_bdd = nullptr;
+
+    if (XGBoosterPredict(
+            booster_sat, dtest_sat, 0, 0, 0, &out_len, &out_result_sat) != 0)
+    {
+        std::cout << "c [Error] Prediction SAT failed: " << XGBGetLastError()
+                  << std::endl;
+        exit(0);
+    }
+
+    if (XGBoosterPredict(
+            booster_sat, dtest_bdd, 0, 0, 0, &out_len, &out_result_bdd) != 0)
+    {
+        std::cerr << "Prediction BDD failed: " << XGBGetLastError()
+                  << std::endl;
+        exit(0);
+    }
+
+    double pred_SAT = out_result_sat[0]; // std::clamp(
+    // static_cast<double>(out_result_sat[0]), 0.0, 2 * Param::get().timeout);
+    double pred_BDD = out_result_bdd[0]; // std::clamp(
+    // static_cast<double>(out_result_bdd[0]), 0.0, 2 * Param::get().timeout);
+
+    printf("c [error] time : %f %f\n", pred_SAT, pred_BDD);
+    fflush(stdout);
+
+    return {SAT_threads, ES_threads, BDD_threads};
 }
 
 std::vector<int>

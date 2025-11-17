@@ -10,6 +10,8 @@
 #include "parser.hpp"
 #include "sweeper.hpp"
 
+#include "../deps/xgboost/include/xgboost/c_api.h"
+
 namespace fastLEC
 {
 
@@ -77,7 +79,16 @@ private:
 
 public:
     Prover() = default;
-    ~Prover() = default;
+    ~Prover()
+    {
+        if (constructed)
+        {
+            XGDMatrixFree(dtest_sat);
+            XGDMatrixFree(dtest_bdd);
+            XGBoosterFree(booster_sat);
+            XGBoosterFree(booster_bdd);
+        }
+    }
 
     //---------------------------------------------------
     // read aiger filename from Param if filename = ""
@@ -123,12 +134,15 @@ public:
                                               int n_threads);
 
     // decision tree selection: schedule sweeping
-    std::vector<int> select_schedule_threads(std::shared_ptr<fastLEC::XAG> xag,
-                                             int n_threads);
-
-    // decision tree selection: schedule sweeping
     std::vector<int> select_half_threads(std::shared_ptr<fastLEC::XAG> xag,
                                          int n_threads);
+
+    // decision tree selection: schedule sweeping
+    BoosterHandle booster_sat, booster_bdd;
+    DMatrixHandle dtest_sat, dtest_bdd;
+    bool constructed = false;
+    std::vector<int> select_schedule_threads(std::shared_ptr<fastLEC::XAG> xag,
+                                             int n_threads);
 
     //---------------------------------------------------
     // CEC check

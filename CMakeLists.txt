@@ -209,7 +209,7 @@ endif()
 # ========================================
 
 # XGBoost submodule
-option(USE_XGBOOST "Enable XGBoost support" OFF)
+option(USE_XGBOOST "Enable XGBoost support" ON)
 if(USE_XGBOOST AND EXISTS "${CMAKE_SOURCE_DIR}/deps/xgboost/CMakeLists.txt")
     # Set XGBoost build options to avoid ABI issues
     set(XGBOOST_USE_CUDA OFF CACHE BOOL "Build XGBoost with CUDA support" FORCE)
@@ -225,6 +225,19 @@ if(USE_XGBOOST AND EXISTS "${CMAKE_SOURCE_DIR}/deps/xgboost/CMakeLists.txt")
     set(CMAKE_CXX_STANDARD_REQUIRED ON CACHE BOOL "C++ standard required" FORCE)
     
     add_subdirectory(deps/xgboost)
+    
+    # Suppress warnings from XGBoost submodule targets
+    # The -Wexpansion-to-defined warning comes from XGBoost's header files
+    if(TARGET xgboost)
+        target_compile_options(xgboost PRIVATE -Wno-expansion-to-defined)
+    endif()
+    if(TARGET objxgboost)
+        target_compile_options(objxgboost PRIVATE -Wno-expansion-to-defined)
+    endif()
+    if(TARGET dmlc)
+        target_compile_options(dmlc PRIVATE -Wno-expansion-to-defined)
+    endif()
+    
     set(XGBOOST_FOUND TRUE)
     message(STATUS "XGBoost submodule found and enabled")
 else()
@@ -736,13 +749,12 @@ if(EXISTING_SOURCES)
     endif()
     
     if(XGBOOST_FOUND)
-        # XGBoost linking with proper error handling
-        find_library(XGBOOST_LIBRARY xgboost PATHS ${CMAKE_SOURCE_DIR}/deps/xgboost/lib NO_DEFAULT_PATH)
-        if(XGBOOST_LIBRARY)
-            target_link_libraries(fastLEC PRIVATE ${XGBOOST_LIBRARY})
-            message(STATUS "Linked XGBoost library: ${XGBOOST_LIBRARY}")
+        # Link XGBoost CMake target (created by add_subdirectory)
+        if(TARGET xgboost)
+            target_link_libraries(fastLEC PRIVATE xgboost)
+            message(STATUS "Linked XGBoost target: xgboost")
         else()
-            message(WARNING "XGBoost library not found, skipping XGBoost linking")
+            message(WARNING "XGBoost target not found, skipping XGBoost linking")
         endif()
     endif()
     
@@ -813,9 +825,9 @@ if(BUILD_LIBRARY AND EXISTING_SOURCES)
     endif()
     
     if(XGBOOST_FOUND)
-        find_library(XGBOOST_LIBRARY xgboost PATHS ${CMAKE_SOURCE_DIR}/deps/xgboost/lib NO_DEFAULT_PATH)
-        if(XGBOOST_LIBRARY)
-            target_link_libraries(fastLEC_lib PUBLIC ${XGBOOST_LIBRARY})
+        # Link XGBoost CMake target (created by add_subdirectory)
+        if(TARGET xgboost)
+            target_link_libraries(fastLEC_lib PUBLIC xgboost)
         endif()
     endif()
     
