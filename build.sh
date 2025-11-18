@@ -1,8 +1,16 @@
 #!/bin/bash
 
-rm -rf build
+# Check if clean is requested
+if [ "$1" = "clean" ]; then
+    echo "=== Cleaning build directory ==="
+    rm -rf build
+    shift  # Remove 'clean' from arguments
+fi
+
+# Create build directory if it doesn't exist
 mkdir -p build
 cd build
+
 # check command for build with cuda 
 if [ "$1" = "no-cuda" ]; then
     echo "=== no cuda ==="
