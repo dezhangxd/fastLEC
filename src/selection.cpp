@@ -2,6 +2,7 @@
 #include <vector>
 #include <algorithm>
 #include <numeric>
+#include <cassert>
 #include "XAG.hpp"
 
 fastLEC::engines
@@ -177,7 +178,8 @@ fastLEC::Prover::select_schedule_threads(std::shared_ptr<fastLEC::XAG> xag,
 
     std::vector<double> features_double = xag->generate_features();
     std::vector<float> features(features_double.begin(), features_double.end());
-    features.emplace_back(1.0); // predict 1 thread efficiency
+    assert(features.size() == 35); // 35 features
+    features.emplace_back(1.0);    // predict 1 thread efficiency
 
     if (XGDMatrixCreateFromMat(features.data(), 1, 36, -1e8, &dtest_sat) != 0)
     {
@@ -204,16 +206,16 @@ fastLEC::Prover::select_schedule_threads(std::shared_ptr<fastLEC::XAG> xag,
     }
 
     if (XGBoosterPredict(
-            booster_sat, dtest_bdd, 0, 0, 0, &out_len, &out_result_bdd) != 0)
+            booster_bdd, dtest_bdd, 0, 0, 0, &out_len, &out_result_bdd) != 0)
     {
         std::cerr << "Prediction BDD failed: " << XGBGetLastError()
                   << std::endl;
         exit(0);
     }
 
-    double pred_SAT = out_result_sat[0]; // std::clamp(
+    float pred_SAT = out_result_sat[0]; // std::clamp(
     // static_cast<double>(out_result_sat[0]), 0.0, 2 * Param::get().timeout);
-    double pred_BDD = out_result_bdd[0]; // std::clamp(
+    float pred_BDD = out_result_bdd[0]; // std::clamp(
     // static_cast<double>(out_result_bdd[0]), 0.0, 2 * Param::get().timeout);
 
     printf("c [error] time : %f %f\n", pred_SAT, pred_BDD);
