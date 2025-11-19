@@ -346,7 +346,7 @@ fastLEC::Prover::select_schedule_threads(std::shared_ptr<fastLEC::XAG> xag,
 }
 
 std::vector<int>
-fastLEC::Prover::select_half_threads(std::shared_ptr<fastLEC::XAG> xag,
+fastLEC::Prover::select_half_threads(std::shared_ptr<fastLEC::XAG> xag [[maybe_unused]],
                                      int n_threads)
 {
     int n_threads_SAT = std::max(1, n_threads / 2);
