@@ -21,7 +21,7 @@ command="-m schedule_sweeping -c 8 -v 2 -t 100"
 
 # rm -rf *.aig
 # ./${BUILD_DIR}/bin/fastLEC -i ../ins/all/test_11_TOP7.aiger $command |gnomon
-./${BUILD_DIR}/bin/fastLEC -i ../ins/sub_aigers_solve/test_13_TOP12_43.aig $command |gnomon
+./${BUILD_DIR}/bin/fastLEC -i ../ins/sub_aigers_solve/test_13_TOP12_42.aig $command |gnomon
 
 # ./${BUILD_DIR}/bin/fastLEC -i ../ins/miter_right/bit5/mul5o5.aig $command |gnomon
 # ./${BUILD_DIR}/bin/fastLEC -i ../ins/miter_right/bit14/mul14o14.aig $command |gnomon

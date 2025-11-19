@@ -133,15 +133,6 @@ fastLEC::Prover::select_schedule_threads(std::shared_ptr<fastLEC::XAG> xag,
             return {1, 0, 0};
     }
 
-    // if (xag->PI.size() >=
-    //     36 + log2(n_threads)) // ES cannot handle within cutoff
-    // {
-    //     if (n_threads > 1)
-    //         return {n_threads - 1, 0, 1};
-    //     else
-    //         return {1, 0, 0};
-    // }
-
     if (!constructed)
     {
         if (XGBoosterCreate(nullptr, 0, &booster_sat) != 0)
@@ -173,20 +164,11 @@ fastLEC::Prover::select_schedule_threads(std::shared_ptr<fastLEC::XAG> xag,
         constructed = true;
     }
 
-    // need to allocate instances
-    int SAT_threads = 1;
-    int ES_threads = 1;
-    int BDD_threads = 1; // at most one thread
-
     std::vector<double> features_double = xag->generate_features();
     std::vector<float> features(features_double.begin(), features_double.end());
     assert(features.size() == 35); // 35 features
 
-    for (auto f : features)
-        printf("%f,", f);
-    puts("");
-
-    // 验证特征值，检查NaN和inf
+    // check NaN and inf
     for (size_t i = 0; i < features.size(); i++)
     {
         if (std::isnan(features[i]) || std::isinf(features[i]))
@@ -245,83 +227,122 @@ fastLEC::Prover::select_schedule_threads(std::shared_ptr<fastLEC::XAG> xag,
 
     float pred_SAT = out_result_sat[0];
     float pred_BDD = out_result_bdd[0];
+    float pred_ES = 0.0;
 
     auto clamp = [](float val, float min_val, float max_val)
     {
         return std::max(min_val, std::min(val, max_val));
     };
 
+    // pred 1t SAT and BDD, pred nthread time for ES.
+    // SAT is increased with log scale
+    // ES is increased with linear scale
     pred_SAT =
         clamp(pred_SAT, 0.0f, static_cast<float>(2 * Param::get().timeout));
     pred_BDD =
         clamp(pred_BDD, 0.0f, static_cast<float>(2 * Param::get().timeout));
+    pred_ES = 0.0003 * xag->used_gates.size() *
+        std::pow(2, (xag->PI.size() - log2(n_threads) - 23));
 
-    printf("c [info] predicted time: SAT=%.3f, BDD=%.3f\n", pred_SAT, pred_BDD);
+    printf("c [Schedule] predicted time: SAT=%.3f, ES=%.3f, BDD=%.3f\n",
+           pred_SAT,
+           pred_ES,
+           pred_BDD);
     fflush(stdout);
 
-    // 释放DMatrix
+    bool can_use_ES = false;
+    if (pred_ES < 1.5 * Param::get().timeout)
+        can_use_ES = true;
+
+    bool can_use_BDD = false;
+    const float bdd_margin = 0.8f;
+    if (pred_BDD < pred_SAT * bdd_margin && n_threads >= 2)
+        can_use_BDD = true;
+
     XGDMatrixFree(dtest_sat_local);
     XGDMatrixFree(dtest_bdd_local);
 
-    // 根据预测结果分配线程
-    // 如果BDD预测时间更短，优先使用BDD
-    if (pred_BDD < pred_SAT * 0.8) // BDD明显更快
-    {
-        BDD_threads = 1;
-        SAT_threads = 0;
-        ES_threads = n_threads > 1 ? n_threads - 1 : 0;
-    }
-    // 如果SAT预测时间更短，优先使用SAT
-    else if (pred_SAT < pred_BDD * 0.8) // SAT明显更快
-    {
-        SAT_threads = n_threads;
-        ES_threads = 0;
-        BDD_threads = 0;
-    }
-    // 如果两者相近，根据线程数分配
+    // 根据can_use_BDD和can_use_ES设置线程分配方案
+    int n_threads_SAT = 0;
+    int n_threads_ES = 0;
+    int n_threads_BDD = 0;
+
+    // BDD最多只分配1线程（可用时），否则为0
+    if (can_use_BDD)
+        n_threads_BDD = 1;
     else
+        n_threads_BDD = 0;
+
+    int remain_threads = n_threads - n_threads_BDD;
+
+    // can use ES
+    if (can_use_ES && remain_threads >= 2)
     {
-        // 分配策略：SAT和BDD各分配一些线程，ES使用剩余线程
-        if (n_threads >= 3)
+        // allocate SAT and ES threads, at least 1 thread for each
+        if (pred_SAT < 0.5 * pred_ES)
         {
-            SAT_threads = n_threads / 2;
-            BDD_threads = 1;
-            ES_threads = n_threads - SAT_threads - BDD_threads;
+            // more for SAT
+            n_threads_SAT = std::max(1, remain_threads - 1);
+            n_threads_ES = remain_threads - n_threads_SAT;
         }
-        else if (n_threads == 2)
+        else if (pred_SAT < 2 * pred_ES)
         {
-            // 根据预测值选择
-            if (pred_SAT < pred_BDD)
-            {
-                SAT_threads = 2;
-                ES_threads = 0;
-                BDD_threads = 0;
-            }
-            else
-            {
-                SAT_threads = 1;
-                BDD_threads = 1;
-                ES_threads = 0;
-            }
+            // half
+            n_threads_SAT = std::max(1, remain_threads / 2);
+            n_threads_ES = remain_threads - n_threads_SAT;
         }
-        else // n_threads == 1
+        else
         {
-            if (pred_SAT < pred_BDD)
-            {
-                SAT_threads = 1;
-                ES_threads = 0;
-                BDD_threads = 0;
-            }
-            else
-            {
-                SAT_threads = 0;
-                ES_threads = 0;
-                BDD_threads = 1;
-            }
+            // more for ES
+            n_threads_ES = std::max(1, remain_threads - 1);
+            n_threads_SAT = remain_threads - n_threads_ES;
         }
+    }
+    else if (can_use_ES && remain_threads == 1)
+    {
+        // one ES or one SAT
+        if (pred_SAT < pred_ES)
+        {
+            n_threads_SAT = 1;
+            n_threads_ES = 0;
+        }
+        else
+        {
+            n_threads_SAT = 0;
+            n_threads_ES = 1;
+        }
+    }
+    else // only can use SAT
+    {
+        n_threads_SAT = remain_threads;
+        n_threads_ES = 0;
     }
 
-    return {1, 1, 1};
+    if (n_threads_SAT < 0)
+        n_threads_SAT = 0;
+    if (n_threads_ES < 0)
+        n_threads_ES = 0;
+    if (n_threads_BDD < 0)
+        n_threads_BDD = 0;
+    while (n_threads_SAT + n_threads_ES + n_threads_BDD < n_threads)
+    {
+        n_threads_SAT++;
+    }
+    while (n_threads_SAT + n_threads_ES + n_threads_BDD > n_threads)
+    {
+        if (n_threads_SAT > 0)
+            n_threads_SAT--;
+        else if (n_threads_ES > 0)
+            n_threads_ES--;
+        else if (n_threads_BDD > 0)
+            n_threads_BDD = 0;
+    }
+
+    printf("c [Schedule] thread assign: SAT=%d, ES=%d, BDD=%d\n",
+           n_threads_SAT,
+           n_threads_ES,
+           n_threads_BDD);
+    return {n_threads_SAT, n_threads_ES, n_threads_BDD};
 }
 
 std::vector<int>
