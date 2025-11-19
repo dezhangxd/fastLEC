@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <numeric>
 #include <cassert>
+#include <cstdio>
 #include "XAG.hpp"
+#include <algorithm>
 
 fastLEC::engines
 fastLEC::Prover::select_one_engine_hybridCEC(std::shared_ptr<fastLEC::XAG> xag)
@@ -179,17 +181,39 @@ fastLEC::Prover::select_schedule_threads(std::shared_ptr<fastLEC::XAG> xag,
     std::vector<double> features_double = xag->generate_features();
     std::vector<float> features(features_double.begin(), features_double.end());
     assert(features.size() == 35); // 35 features
-    features.emplace_back(1.0);    // predict 1 thread efficiency
 
-    if (XGDMatrixCreateFromMat(features.data(), 1, 36, -1e8, &dtest_sat) != 0)
+    for (auto f : features)
+        printf("%f,", f);
+    puts("");
+
+    // 验证特征值，检查NaN和inf
+    for (size_t i = 0; i < features.size(); i++)
     {
-        std::cout << "c [Error] Failed to create DMatrix" << std::endl;
+        if (std::isnan(features[i]) || std::isinf(features[i]))
+        {
+            std::cout << "c [Warning] Feature " << i
+                      << " is NaN or inf, setting to 0" << std::endl;
+            features[i] = 0.0f;
+        }
+    }
+
+    features.emplace_back(1.0); // predict 1 thread efficiency
+
+    DMatrixHandle dtest_sat_local = nullptr;
+    DMatrixHandle dtest_bdd_local = nullptr;
+
+    if (XGDMatrixCreateFromMat(
+            features.data(), 1, 36, -1e8, &dtest_sat_local) != 0)
+    {
+        std::cout << "c [Error] Failed to create DMatrix for SAT" << std::endl;
         exit(0);
     }
 
-    if (XGDMatrixCreateFromMat(features.data(), 1, 36, -1e8, &dtest_bdd) != 0)
+    if (XGDMatrixCreateFromMat(
+            features.data(), 1, 36, -1e8, &dtest_bdd_local) != 0)
     {
-        std::cout << "c [Error] Failed to create DMatrix" << std::endl;
+        std::cout << "c [Error] Failed to create DMatrix for BDD" << std::endl;
+        XGDMatrixFree(dtest_sat_local);
         exit(0);
     }
 
@@ -198,30 +222,106 @@ fastLEC::Prover::select_schedule_threads(std::shared_ptr<fastLEC::XAG> xag,
     const float *out_result_bdd = nullptr;
 
     if (XGBoosterPredict(
-            booster_sat, dtest_sat, 0, 0, 0, &out_len, &out_result_sat) != 0)
+            booster_sat, dtest_sat_local, 0, 0, 0, &out_len, &out_result_sat) !=
+        0)
     {
         std::cout << "c [Error] Prediction SAT failed: " << XGBGetLastError()
                   << std::endl;
+        XGDMatrixFree(dtest_sat_local);
+        XGDMatrixFree(dtest_bdd_local);
         exit(0);
     }
 
     if (XGBoosterPredict(
-            booster_bdd, dtest_bdd, 0, 0, 0, &out_len, &out_result_bdd) != 0)
+            booster_bdd, dtest_bdd_local, 0, 0, 0, &out_len, &out_result_bdd) !=
+        0)
     {
-        std::cerr << "Prediction BDD failed: " << XGBGetLastError()
+        std::cerr << "c [Error] Prediction BDD failed: " << XGBGetLastError()
                   << std::endl;
+        XGDMatrixFree(dtest_sat_local);
+        XGDMatrixFree(dtest_bdd_local);
         exit(0);
     }
 
-    float pred_SAT = out_result_sat[0]; // std::clamp(
-    // static_cast<double>(out_result_sat[0]), 0.0, 2 * Param::get().timeout);
-    float pred_BDD = out_result_bdd[0]; // std::clamp(
-    // static_cast<double>(out_result_bdd[0]), 0.0, 2 * Param::get().timeout);
+    float pred_SAT = out_result_sat[0];
+    float pred_BDD = out_result_bdd[0];
 
-    printf("c [error] time : %f %f\n", pred_SAT, pred_BDD);
+    auto clamp = [](float val, float min_val, float max_val)
+    {
+        return std::max(min_val, std::min(val, max_val));
+    };
+
+    pred_SAT =
+        clamp(pred_SAT, 0.0f, static_cast<float>(2 * Param::get().timeout));
+    pred_BDD =
+        clamp(pred_BDD, 0.0f, static_cast<float>(2 * Param::get().timeout));
+
+    printf("c [info] predicted time: SAT=%.3f, BDD=%.3f\n", pred_SAT, pred_BDD);
     fflush(stdout);
 
-    return {SAT_threads, ES_threads, BDD_threads};
+    // 释放DMatrix
+    XGDMatrixFree(dtest_sat_local);
+    XGDMatrixFree(dtest_bdd_local);
+
+    // 根据预测结果分配线程
+    // 如果BDD预测时间更短，优先使用BDD
+    if (pred_BDD < pred_SAT * 0.8) // BDD明显更快
+    {
+        BDD_threads = 1;
+        SAT_threads = 0;
+        ES_threads = n_threads > 1 ? n_threads - 1 : 0;
+    }
+    // 如果SAT预测时间更短，优先使用SAT
+    else if (pred_SAT < pred_BDD * 0.8) // SAT明显更快
+    {
+        SAT_threads = n_threads;
+        ES_threads = 0;
+        BDD_threads = 0;
+    }
+    // 如果两者相近，根据线程数分配
+    else
+    {
+        // 分配策略：SAT和BDD各分配一些线程，ES使用剩余线程
+        if (n_threads >= 3)
+        {
+            SAT_threads = n_threads / 2;
+            BDD_threads = 1;
+            ES_threads = n_threads - SAT_threads - BDD_threads;
+        }
+        else if (n_threads == 2)
+        {
+            // 根据预测值选择
+            if (pred_SAT < pred_BDD)
+            {
+                SAT_threads = 2;
+                ES_threads = 0;
+                BDD_threads = 0;
+            }
+            else
+            {
+                SAT_threads = 1;
+                BDD_threads = 1;
+                ES_threads = 0;
+            }
+        }
+        else // n_threads == 1
+        {
+            if (pred_SAT < pred_BDD)
+            {
+                SAT_threads = 1;
+                ES_threads = 0;
+                BDD_threads = 0;
+            }
+            else
+            {
+                SAT_threads = 0;
+                ES_threads = 0;
+                BDD_threads = 1;
+            }
+        }
+    }
+
+    return {1, 1, 1};
 }
 
 std::vector<int>

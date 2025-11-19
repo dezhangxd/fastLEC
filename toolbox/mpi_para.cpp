@@ -15,7 +15,6 @@ int main(int argc, char **argv)
     CNF cnf;
     cnf.build(cnf_file, cube_size);
 
-    // 一次求解尝试。
     if (world_rank == 0)
     {
         // Manager process

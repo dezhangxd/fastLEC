@@ -1429,10 +1429,10 @@ void fastLEC::XAG::compute_simulation_features(
         }
     }
 
-    printf("PO: %d, %d var_size: %d\n",
-           this->PO,
-           aiger_var(this->PO),
-           this->max_var);
+    // printf("PO: %d, %d var_size: %d\n",
+    //        this->PO,
+    //        aiger_var(this->PO),
+    //        this->max_var);
     for (int v = 1; v <= this->max_var; v++)
     {
         int l = aiger_pos_lit(v);

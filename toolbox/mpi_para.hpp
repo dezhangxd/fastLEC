@@ -26,7 +26,6 @@ public:
 
     void build_mask(const std::string &cnf_file, int cube_size)
     {
-
         mask.resize(n_vars + 1, false);
 
         std::vector<int> cubes;
@@ -129,7 +128,7 @@ public:
     }
 };
 
-// 全局退出函数
+// Global exit function
 void global_exit(int exit_code)
 {
     int world_rank;
@@ -138,7 +137,7 @@ void global_exit(int exit_code)
     if (world_rank == 0)
     {
         std::cout << "Manager: Initiating global exit..." << std::endl;
-        // 广播退出信号给所有进程
+        // Broadcast exit signal to all processes
         int exit_signal = -1;
         MPI_Bcast(&exit_signal, 1, MPI_INT, 0, MPI_COMM_WORLD);
     }
@@ -155,14 +154,14 @@ enum Status
 
 class Manager
 {
-    std::vector<Status> worker_status; //
-    unsigned num_running;              // BUSY的worker
+    std::vector<Status> worker_status; // Status for each worker
+    unsigned num_running;              // Number of BUSY workers
 
-    int next_task_index;                    // 下一个待求解的任务索引
-    std::vector<std::vector<int>> tasks;    // 存储补充的cube
-    std::vector<int> task_worker;           // 记录每个任务是由哪个worker求解的
-    std::vector<MPI_Request> send_requests; // 存储发送请求
-    std::vector<MPI_Status> send_statuses;  // 存储发送状态
+    int next_task_index;                    // Index of next task to solve
+    std::vector<std::vector<int>> tasks;    // Store cubes to supplement
+    std::vector<int> task_worker;           // Record which worker solves each task
+    std::vector<MPI_Request> send_requests; // Store send requests
+    std::vector<MPI_Status> send_statuses;  // Store send statuses
 
     int world_size;
     int world_rank;
@@ -176,13 +175,13 @@ public:
         this->num_running = 0;
         this->next_task_index = 0;
         worker_status.resize(world_size, Status::FREE);
-        send_requests.resize(world_size); // 为每个worker分配一个发送请求
-        send_statuses.resize(world_size); // 为每个worker分配一个发送状态
+        send_requests.resize(world_size); // Allocate a send request for each worker
+        send_statuses.resize(world_size); // Allocate a send status for each worker
     }
 
     ~Manager()
     {
-        // 清理资源
+        // Clean resources
         tasks.clear();
         task_worker.clear();
         worker_status.clear();
@@ -192,7 +191,7 @@ public:
 
     void Bcast_CNF()
     {
-        // 广播 CNF 数据给所有 worker，并更新
+        // Broadcast CNF data to all workers, and update
         int cnf_size = cnf.lits.size();
         MPI_Bcast(&cnf_size, 1, MPI_INT, world_rank, MPI_COMM_WORLD);
         MPI_Bcast(
@@ -204,8 +203,8 @@ public:
         this->cnf = cnf;
         Bcast_CNF();
 
-        tasks.push_back({});       // 初始任务
-        task_worker.push_back(-1); // 没有分配
+        tasks.push_back({});       // Initial task
+        task_worker.push_back(-1); // Not assigned
         for (int i = 1; i <= cnf.n_vars; i++)
         {
             if (cnf.mask[i])
@@ -227,7 +226,7 @@ public:
 
         while (completed_tasks < tasks.size() && !found_counterexample)
         {
-            // 检查是否有完成的任务
+            // Check if there are finished tasks
             MPI_Status status;
             int flag;
             MPI_Iprobe(
@@ -235,7 +234,7 @@ public:
 
             if (flag)
             {
-                // 有任务完成，接收结果
+                // A task is done, receive result
                 int result;
                 MPI_Recv(&result,
                          1,
@@ -253,14 +252,14 @@ public:
                 completed_tasks++;
 
                 if (result == 1)
-                { // 如果找到反例
+                { // Found a counterexample
                     found_counterexample = true;
                     stop_all(worker_rank);
                     return 10;
                 }
             }
 
-            // 尝试分配新任务
+            // Try to assign new task
             if (next_task_index < tasks.size() && num_running < world_size)
             {
                 if (assign_task(next_task_index) != -1)
@@ -270,12 +269,12 @@ public:
             }
         }
 
-        return 20; // 所有任务都完成且没有找到反例
+        return 20; // All tasks finished and no counterexample was found
     }
 
     int assign_task(int task_id)
     {
-        // 找一个Free的worker，分配task_id
+        // Find a FREE worker and assign task_id
         for (int i = 1; i < world_size; i++)
         {
             if (worker_status[i] == Status::FREE)
@@ -284,7 +283,7 @@ public:
                 num_running++;
                 task_worker[task_id] = i;
 
-                // 使用非阻塞发送任务给worker
+                // Use non-blocking send to assign task to worker
                 MPI_Isend(&task_id,
                           1,
                           MPI_INT,
@@ -293,7 +292,7 @@ public:
                           MPI_COMM_WORLD,
                           &send_requests[i]);
 
-                // 发送cube数据
+                // Send cube data
                 int cube_size = tasks[task_id].size();
                 MPI_Send(&cube_size, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
                 MPI_Send(tasks[task_id].data(),
@@ -324,7 +323,7 @@ public:
 
     void terminate()
     {
-        // 发送终止信号给所有worker
+        // Send termination signal to all workers
         for (int i = 1; i < world_size; i++)
         {
             int terminate_signal = -1;
@@ -337,10 +336,10 @@ class Worker
 {
 private:
     int world_rank, world_size;
-    int current_task_id;   // 当前正在求解的任务ID,没有任务则为0
-    std::vector<int> CNF;  // 存储CNF公式
-    std::vector<int> cube; // 存储cube
-    bool should_stop;      // 是否应该停止当前任务
+    int current_task_id;   // The current task ID; 0 if no task
+    std::vector<int> CNF;  // Stores the CNF formula
+    std::vector<int> cube; // Stores the cube
+    bool should_stop;      // If the current task should be stopped
 
 public:
     std::string log_file;
@@ -352,7 +351,7 @@ public:
 
     void start()
     {
-        // 接收manager的CNF
+        // Receive CNF from manager
         int cnf_size;
         MPI_Bcast(&cnf_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
         CNF.resize(cnf_size);
@@ -360,19 +359,19 @@ public:
 
         while (true)
         {
-            // 等待接收manager的任务
+            // Wait to receive task from manager
             MPI_Status status;
             int task_id;
             MPI_Recv(
                 &task_id, 1, MPI_INT, 0, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
 
-            // 检查是否是终止信号
+            // Check if termination signal
             if (task_id == -1)
             {
                 break;
             }
 
-            // 接收假设
+            // Receive assumption
             int cube_size;
             MPI_Recv(&cube_size, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &status);
             cube.resize(cube_size);
@@ -382,10 +381,10 @@ public:
             current_task_id = task_id;
             should_stop = false;
 
-            // 求解任务
+            // Solve task
             int result = solve_task();
 
-            // 发送结果给manager
+            // Send result to manager
             MPI_Send(&result, 1, MPI_INT, 0, task_id, MPI_COMM_WORLD);
         }
     }
@@ -405,7 +404,7 @@ private:
 
         kissat *solver = kissat_init();
 
-        // 首先添加CNF子句
+        // Add CNF clauses first
         for (auto &lit : CNF)
         {
             if (should_stop)
@@ -418,13 +417,13 @@ private:
 
         std::stringstream ss;
 
-        // 然后添加cube作为单子句
+        // Then add the cube as unit clauses
         ss << "{ ";
         for (auto &lit : cube)
         {
             kissat_add(solver, lit);
             ss << lit << " ";
-            kissat_add(solver, 0); // 添加子句结束标记
+            kissat_add(solver, 0); // End of clause marker
         }
         ss << "} ";
 
