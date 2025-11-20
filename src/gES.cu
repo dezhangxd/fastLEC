@@ -5,6 +5,10 @@
 #include <cstdio>
 #include <cmath>
 #include <time.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/file.h>
+#include <cstring>
 
 double remain_time = 500000;
 
@@ -240,6 +244,214 @@ unsigned calculate_optimal_threads_per_block(const cudaDeviceProp &prop, unsigne
     return optimal_threads;
 }
 
+// Function to try to acquire a lock on a GPU device
+// Returns lock file descriptor if successful, -1 otherwise
+static int try_lock_gpu_device(int device_id)
+{
+    char lock_file_path[256];
+    snprintf(lock_file_path, sizeof(lock_file_path), "/tmp/fastlec_gpu_%d.lock", device_id);
+    
+    int lock_fd = open(lock_file_path, O_CREAT | O_RDWR, 0666);
+    if (lock_fd < 0)
+    {
+        return -1;
+    }
+    
+    // Try to acquire exclusive lock (non-blocking)
+    if (flock(lock_fd, LOCK_EX | LOCK_NB) != 0)
+    {
+        close(lock_fd);
+        return -1;
+    }
+    
+    // Write PID to lock file
+    char pid_str[32];
+    snprintf(pid_str, sizeof(pid_str), "%d\n", getpid());
+    ftruncate(lock_fd, 0);
+    write(lock_fd, pid_str, strlen(pid_str));
+    fsync(lock_fd);
+    
+    return lock_fd;
+}
+
+// Global variable to store the lock file descriptor for the selected GPU
+static int gpu_lock_fd = -1;
+
+// Function to release the GPU device lock
+static void release_gpu_lock()
+{
+    if (gpu_lock_fd >= 0)
+    {
+        flock(gpu_lock_fd, LOCK_UN);
+        close(gpu_lock_fd);
+        gpu_lock_fd = -1;
+    }
+}
+
+// Function to check if a GPU device is idle/available
+// Returns true if the GPU can be set as current device, can allocate memory,
+// and has sufficient free memory (not heavily used by other processes)
+bool is_gpu_idle(int device_id, int verbose)
+{
+    cudaError_t err;
+    
+    // Save current device to restore later
+    int current_device = -1;
+    cudaGetDevice(&current_device);
+    
+    // Try to set the device
+    err = cudaSetDevice(device_id);
+    if (err != cudaSuccess)
+    {
+        if (current_device >= 0)
+            cudaSetDevice(current_device);
+        return false;
+    }
+    
+    // Get device properties
+    cudaDeviceProp prop;
+    err = cudaGetDeviceProperties(&prop, device_id);
+    if (err != cudaSuccess)
+    {
+        if (current_device >= 0)
+            cudaSetDevice(current_device);
+        return false;
+    }
+    
+    // Check memory usage - if GPU is being used by other processes, 
+    // there should be significant memory already allocated
+    size_t free_mem = 0;
+    size_t total_mem = 0;
+    err = cudaMemGetInfo(&free_mem, &total_mem);
+    if (err != cudaSuccess)
+    {
+        if (current_device >= 0)
+            cudaSetDevice(current_device);
+        return false;
+    }
+    
+    // Calculate memory usage percentage
+    double mem_usage_percent = (double)(total_mem - free_mem) / total_mem * 100.0;
+    
+    // Consider GPU idle if memory usage is less than 10%
+    // This threshold can be adjusted based on needs
+    const double IDLE_THRESHOLD = 10.0; // 10% memory usage threshold
+    
+    if (verbose > 1)
+    {
+        printf("c [gpu] Device %d (%s): Memory usage = %.2f%% (Free: %.2f GB / Total: %.2f GB)\n",
+               device_id, prop.name, mem_usage_percent,
+               free_mem / (1024.0 * 1024.0 * 1024.0),
+               total_mem / (1024.0 * 1024.0 * 1024.0));
+    }
+    
+    // Also check if we can allocate a reasonable amount of memory
+    // Try to allocate 100MB to ensure GPU is truly available
+    void *test_ptr = nullptr;
+    size_t test_size = 100 * 1024 * 1024; // 100MB
+    err = cudaMalloc(&test_ptr, test_size);
+    if (err != cudaSuccess)
+    {
+        if (current_device >= 0)
+            cudaSetDevice(current_device);
+        return false;
+    }
+    
+    // Free the test memory
+    cudaFree(test_ptr);
+    
+    // Reset error state
+    cudaGetLastError();
+    
+    // Restore original device
+    if (current_device >= 0)
+        cudaSetDevice(current_device);
+    
+    // GPU is idle if memory usage is below threshold
+    return mem_usage_percent < IDLE_THRESHOLD;
+}
+
+// Function to find the first idle GPU device
+// Returns the device ID if found, or -1 if no idle GPU is found
+int find_first_idle_gpu(int verbose)
+{
+    int deviceCount = 0;
+    cudaError_t err = cudaGetDeviceCount(&deviceCount);
+    
+    if (err != cudaSuccess || deviceCount == 0)
+    {
+        if (verbose > 0)
+        {
+            printf("c [gpu] No CUDA devices found\n");
+        }
+        return -1;
+    }
+    
+    if (verbose > 1)
+    {
+        printf("c [gpu] Checking %d GPU device(s) for availability...\n", deviceCount);
+    }
+    
+    // Check each GPU device
+    for (int dev = 0; dev < deviceCount; dev++)
+    {
+        if (is_gpu_idle(dev, verbose))
+        {
+            // Try to acquire lock on this GPU
+            int lock_fd = try_lock_gpu_device(dev);
+            if (lock_fd >= 0)
+            {
+                // Successfully acquired lock
+                gpu_lock_fd = lock_fd;
+                if (verbose > 0)
+                {
+                    cudaDeviceProp prop;
+                    cudaGetDeviceProperties(&prop, dev);
+                    size_t free_mem = 0, total_mem = 0;
+                    cudaSetDevice(dev);
+                    cudaMemGetInfo(&free_mem, &total_mem);
+                    printf("c [gpu] Selected GPU device %d: %s (Free memory: %.2f GB)\n", 
+                           dev, prop.name, free_mem / (1024.0 * 1024.0 * 1024.0));
+                }
+                return dev;
+            }
+            else
+            {
+                // Lock acquisition failed, another process is using this GPU
+                if (verbose > 1)
+                {
+                    cudaDeviceProp prop;
+                    cudaGetDeviceProperties(&prop, dev);
+                    printf("c [gpu] GPU device %d (%s) is locked by another process\n", dev, prop.name);
+                }
+            }
+        }
+        else
+        {
+            if (verbose > 1)
+            {
+                cudaDeviceProp prop;
+                cudaGetDeviceProperties(&prop, dev);
+                printf("c [gpu] GPU device %d (%s) is not available or in use\n", dev, prop.name);
+            }
+        }
+    }
+    
+    if (verbose > 0)
+    {
+        printf("c [gpu] WARNING: No idle GPU device found, will try to use device 0\n");
+    }
+    
+    // Fallback to device 0 if no idle GPU found
+    // Still try to acquire lock on device 0
+    int lock_fd = try_lock_gpu_device(0);
+    if (lock_fd >= 0)
+    {
+        gpu_lock_fd = lock_fd;
+    }
+    return 0;
+}
+
 // Function to validate GPU configuration
 bool validate_gpu_config(const GPUConfig &config, const cudaDeviceProp &prop)
 {
@@ -277,10 +489,13 @@ bool validate_gpu_config(const GPUConfig &config, const cudaDeviceProp &prop)
     return valid;
 }
 
-GPUConfig configure_gpu_parameters(unsigned mem_sz)
+GPUConfig configure_gpu_parameters(unsigned mem_sz, int device_id)
 {
+    // Set the device before getting properties
+    cudaSetDevice(device_id);
+    
     cudaDeviceProp prop;
-    cudaGetDeviceProperties(&prop, 0); // use the first GPU
+    cudaGetDeviceProperties(&prop, device_id);
 
     GPUConfig config;
 
@@ -426,9 +641,21 @@ void free_gpu(glob_ES *ges)
 
 int gpu_run(glob_ES *ges, int verbose)
 {
+    // Find and select the first idle GPU
+    int selected_device = find_first_idle_gpu(verbose);
+    if (selected_device < 0)
+    {
+        printf("c ERROR: [gpu] No available GPU device found\n");
+        release_gpu_lock(); // Release lock if any
+        return 0; // fallback to CPU version
+    }
+    
+    // Set the selected device as current
+    cudaSetDevice(selected_device);
+    
     if (verbose > 1)
     {
-        show_gpu_info();
+        show_gpu_info(selected_device);
         fflush(stdout);
     }
 
@@ -439,12 +666,13 @@ int gpu_run(glob_ES *ges, int verbose)
 
     // Todo:: If rounds are too few, use CPU version
 
-    GPUConfig gpuConfig = configure_gpu_parameters(ges->mem_sz);
+    GPUConfig gpuConfig = configure_gpu_parameters(ges->mem_sz, selected_device);
 
     // Check if GPU configuration is valid
     if (!gpuConfig.isValid)
     {
         printf("c ERROR: [gpu] GPU configuration failed, you should back to use CPU version\n");
+        release_gpu_lock(); // Release lock before returning
         return 0; // fallback to CPU version
     }
 
@@ -611,6 +839,9 @@ int gpu_run(glob_ES *ges, int verbose)
     cudaFree(d_ops);
     cudaFree(d_festivals);
     cudaFree(d_results);
+
+    // Release GPU lock before returning
+    release_gpu_lock();
 
     // Return SAT if found
     if (glob_res == 10)

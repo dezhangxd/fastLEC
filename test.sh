@@ -20,8 +20,8 @@ command="-m gpu_sweeping -c 32 -v 2 -t 100"
 
 
 # rm -rf *.aig
-./${BUILD_DIR}/bin/fastLEC -i ../ins/all/test_11_TOP6.aiger $command |gnomon
-./${BUILD_DIR}/bin/fastLEC -i ../ins/sub_aigers_solve/test_32_TOP16_36.aig $command |gnomon
+# ./${BUILD_DIR}/bin/fastLEC -i ../ins/all/test_11_TOP6.aiger $command |gnomon
+# ./${BUILD_DIR}/bin/fastLEC -i ../ins/sub_aigers_solve/test_32_TOP16_36.aig $command |gnomon
 
 # ./${BUILD_DIR}/bin/fastLEC -i ../ins/miter_right/bit5/mul5o5.aig $command |gnomon
 
@@ -33,7 +33,7 @@ command="-m gpu_sweeping -c 32 -v 2 -t 100"
 # ./${BUILD_DIR}/bin/fastLEC -i ../ins/miter_right/bit15/mul15o15.aig $command |gnomon
 # ./${BUILD_DIR}/bin/fastLEC -i ../ins/miter_right/bit16/mul16o16.aig $command |gnomon
 # ./${BUILD_DIR}/bin/fastLEC -i ../ins/miter_right/bit17/mul17o17.aig $command |gnomon
-# ./${BUILD_DIR}/bin/fastLEC -i ../ins/miter_right/bit18/mul18o18.aig $command |gnomon
+./${BUILD_DIR}/bin/fastLEC -i ../ins/miter_right/bit18/mul18o18.aig $command |gnomon
 
 # ./${BUILD_DIR}/bin/fastLEC -i ../ins/miter_error/bit13/miter13o13.aig $command |gnomon
 
