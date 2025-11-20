@@ -104,10 +104,18 @@ fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag)
         return ret_vals::ret_UNK;
     }
 
+    // Declare variables outside try block so they can be used in catch and after try-catch
+    std::shared_ptr<CuddManager> manager = nullptr;
+    ret_vals ret = ret_vals::ret_UNK;
+    int gate_count = 0;
+    int total_gates = xag->used_gates.size();
+    bool terminated_by_other = false;
+    bool terminated_by_timeout = false;
+
     try
     {
         // Create CUDD manager with shared_ptr for automatic cleanup
-        auto manager = std::make_shared<CuddManager>(
+        manager = std::make_shared<CuddManager>(
             0, 0, CUDD_UNIQUE_SLOTS, CUDD_CACHE_SLOTS, 0);
 
         // Add global termination hook and callback for immediate response
@@ -129,10 +137,6 @@ fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag)
         }
 
         // Process gates with hook-based termination checking
-        int gate_count = 0;
-        int total_gates = xag->used_gates.size();
-        bool terminated_by_other = false;
-        bool terminated_by_timeout = false;
 
         for (int gid : xag->used_gates)
         {
@@ -174,8 +178,6 @@ fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag)
             }
             gate_count++;
         }
-
-        ret_vals ret = ret_vals::ret_UNK;
 
         // Final check: timeout or terminated by other thread
         double final_time = fastLEC::ResMgr::get().get_runtime();
@@ -220,37 +222,55 @@ fastLEC::Prover::seq_BDD_cudd(std::shared_ptr<fastLEC::XAG> xag)
             }
         }
 
-        // Clean up the hook and callback
-        manager->removeGlobalTerminationHook();
-        manager->unregisterTerminationCallback();
-
-        // Always output statistics, regardless of termination reason
-        const char *timeout_status = terminated_by_timeout ? " (TO)"
-            : terminated_by_other                          ? " (ENG)"
-            : manager->hasTermination()                    ? " (UNK)"
-                                                           : " ";
-
-        printf("c [BDD] result = %d, [nodes = %ld, vars = %d, reorderings = "
-               "%d, memory = %ld bytes] [time = %f] [processed %d/%d gates], "
-               "%s \n",
-               ret,
-               manager->readNodeCount(),
-               manager->readSize(),
-               manager->readReorderings(),
-               (long)manager->readMemoryInUse(),
-               fastLEC::ResMgr::get().get_runtime() - start_time,
-               gate_count,
-               total_gates,
-               timeout_status);
-        fflush(stdout);
-
-        return ret;
     }
     catch (const std::exception &e)
     {
         // Even on exception, try to output basic statistics if manager is
         // available
         printf("c [BDD] Error: %s, returning UNKNOWN\n", e.what());
-        return ret_vals::ret_UNK;
+        ret = ret_vals::ret_UNK;
     }
+
+    // Clean up the hook and callback
+    if (manager != nullptr)
+    {
+        manager->removeGlobalTerminationHook();
+        manager->unregisterTerminationCallback();
+    }
+    
+    // Always output statistics, regardless of termination reason
+    const char *timeout_status = terminated_by_timeout ? " (TO)"
+        : terminated_by_other                          ? " (ENG)"
+        : (manager != nullptr && manager->hasTermination()) ? " (UNK)"
+                                                             : " ";
+
+    if (manager != nullptr)
+    {
+        printf("c [BDD] result = %d, [nodes = %ld, vars = %d, reorderings = "
+                "%d, memory = %ld bytes] [time = %f] [processed %d/%d gates], "
+                "%s \n",
+                ret,
+                manager->readNodeCount(),
+                manager->readSize(),
+                manager->readReorderings(),
+                (long)manager->readMemoryInUse(),
+                fastLEC::ResMgr::get().get_runtime() - start_time,
+                gate_count,
+                total_gates,
+                timeout_status);
+    }
+    else
+    {
+        printf("c [BDD] result = %d, [manager not initialized] [time = %f] "
+                "[processed %d/%d gates]%s \n",
+                ret,
+                fastLEC::ResMgr::get().get_runtime() - start_time,
+                gate_count,
+                total_gates,
+                timeout_status);
+    }
+    fflush(stdout);
+
+    return ret;
+    
 }

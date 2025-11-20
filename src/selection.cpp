@@ -357,6 +357,42 @@ fastLEC::Prover::select_half_threads(std::shared_ptr<fastLEC::XAG> xag [[maybe_u
     return {n_threads_SAT, n_threads_BDD, n_threads_BDD};
 }
 
+std::vector<int>
+fastLEC::Prover::select_gpu_threads(std::shared_ptr<fastLEC::XAG> xag [[maybe_unused]],
+                                     int n_threads)
+{
+    if (xag->PI.size() <= 6)
+        return {1, 0, 0}; // small instances using fast SAT check
+
+    double pred_ES = 0.0003 * xag->used_gates.size() *
+        std::pow(2, (xag->PI.size() - log2(n_threads) - 23));
+
+    if (pred_ES < 0.1)
+        return {0, n_threads, 0}; // CPU ES is fast enough; 
+
+    
+    if (xag->PI.size() <= 26)
+        return {0, 1, 0}; // small instances that ES is fast enough
+
+    if (n_threads == 1)
+    {
+        if (select_one_engine_hybridCEC(xag) == fastLEC::engines::engine_seq_ES)
+            return {0, 1, 0};
+        else
+            return {1, 0, 0};
+    }
+
+    bool use_gpuES = false;
+    // assume 4090 is similar to 128 threads for ES
+    double pred_ES_4090 = 0.0003 * xag->used_gates.size() *
+    std::pow(2, (xag->PI.size() - log2(128) - 23)); 
+
+    if(pred_ES_4090 <= 1.2 * Param::get().timeout)
+        use_gpuES = true;
+
+    return {n_threads - 1, use_gpuES ? -1 : 0, 1};
+}
+
 std::vector<double> fastLEC::XAG::generate_features()
 {
     std::vector<double> features;

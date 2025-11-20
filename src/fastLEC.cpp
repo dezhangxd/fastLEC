@@ -426,6 +426,11 @@ fastLEC::Prover::para_portfolios(std::shared_ptr<fastLEC::XAG> xag, int n_t)
         threads = select_half_threads(xag, n_t);
         tag = "Half";
     }
+    else if (Param::get().mode == Mode::gpu_sweeping)
+    {
+        threads = select_gpu_threads(xag, n_t);
+        tag = "H-GPU";
+    }
     else
         threads = {n_t, 0, 0};
 
@@ -468,7 +473,14 @@ fastLEC::Prover::para_portfolios(std::shared_ptr<fastLEC::XAG> xag, int n_t)
                 if (ret_ES != ret_vals::ret_UNK)
                     global_solved_for_PPE.store(true);
             }
+            else if (n_threads_ES < 0)
+            {
+                ret_ES = gpu_ES(xag);
+                if (ret_ES != ret_vals::ret_UNK)
+                    global_solved_for_PPE.store(true);
+            }
         });
+
 
     std::thread func_BDD(
         [&]()
@@ -600,6 +612,11 @@ Prover::run_sweeping(std::shared_ptr<fastLEC::Sweeper> sweeper)
             break;
         }
         case Mode::PPE_sweeping:
+        {
+            ret = para_portfolios(sub_graph, Param::get().n_threads);
+            break;
+        }
+        case Mode::gpu_sweeping:
         {
             ret = para_portfolios(sub_graph, Param::get().n_threads);
             break;

@@ -115,10 +115,6 @@ public:
     // sweeping engine for CEC
     fastLEC::ret_vals run_sweeping(std::shared_ptr<fastLEC::Sweeper> sweeper);
 
-    // half sweeping engine for CEC
-    fastLEC::ret_vals run_half_sweeping(std::shared_ptr<fastLEC::XAG> xag,
-                                        int n_threads = 1);
-
     // portfolio engines for CEC
     fastLEC::ret_vals para_portfolios(std::shared_ptr<fastLEC::XAG> xag,
                                       int n_threads = 1);
@@ -141,6 +137,9 @@ public:
     std::vector<int> select_schedule_threads(std::shared_ptr<fastLEC::XAG> xag,
                                              int n_threads);
 
+    // CPU+GPU sweeping: CPU: n_threads-1 SAT, 1BDD, GPU: ES
+    std::vector<int> select_gpu_threads(std::shared_ptr<fastLEC::XAG> xag,
+        int n_threads);
     //---------------------------------------------------
     // CEC check
     fastLEC::ret_vals check_cec();

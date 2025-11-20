@@ -499,6 +499,7 @@ int gpu_run(glob_ES *ges, int verbose)
     cudaMemcpy(d_ops, ges->ops, ges->n_ops * sizeof(operation), cudaMemcpyHostToDevice);
 
     int glob_res = 0;
+    bool completed_all_batches = false;
 
     // Process rounds in batches
     const unsigned long long batch_size = gpuConfig.maxBatchSize; // Use the calculated reasonable batch size
@@ -513,13 +514,28 @@ int gpu_run(glob_ES *ges, int verbose)
 
     for (unsigned long long batch = 0; batch < num_batches && glob_res != 10; batch++)
     {
+        // Check if problem is already solved by other engines in PPE
+        if (fastLEC::global_solved_for_PPE.load())
+        {
+            if (verbose > 0)
+            {
+                printf("c [gpu] Exiting early: problem solved by other engine in PPE\n");
+                fflush(stdout);
+            }
+            completed_all_batches = false;
+            break;
+        }
+
         struct timespec te;
         clock_gettime(CLOCK_MONOTONIC, &te);
         double tt = te.tv_sec + te.tv_nsec / 1000000000.0;
         tt = ((long long)(tt * 1000000)) / 1000000.0;
         
         if(tt - t > remain_time)
+        {
+            completed_all_batches = false;
             break;
+        }
 
         unsigned long long start_r = batch * batch_size;
         unsigned long long end_r = (batch + 1) * batch_size;
@@ -545,6 +561,7 @@ int gpu_run(glob_ES *ges, int verbose)
         if (err != cudaSuccess)
         {
             printf("c [gpu] CUDA kernel error: %s\n", cudaGetErrorString(err));
+            completed_all_batches = false;
             break;
         }
 
@@ -564,6 +581,24 @@ int gpu_run(glob_ES *ges, int verbose)
 
         free(h_results);
 
+        // Check again after processing batch
+        if (fastLEC::global_solved_for_PPE.load())
+        {
+            if (verbose > 0)
+            {
+                printf("c [gpu] Exiting early: problem solved by other engine in PPE\n");
+                fflush(stdout);
+            }
+            completed_all_batches = false;
+            break;
+        }
+
+        // Check if this is the last batch
+        if (batch == num_batches - 1)
+        {
+            completed_all_batches = true;
+        }
+
         if (verbose > 0 && batch % 100 == 0)
         {
             printf("c [gpu] Progress: %6.2f%% (%llu/%llu batches)\n",
@@ -577,8 +612,13 @@ int gpu_run(glob_ES *ges, int verbose)
     cudaFree(d_festivals);
     cudaFree(d_results);
 
+    // Return SAT if found
     if (glob_res == 10)
         return 10;
+    // Return UNK if not completed all batches (timeout, terminated, error, etc.)
+    else if (!completed_all_batches)
+        return 0;
+    // Return UNS only if completed all batches and no SAT found
     else
         return 20;
 }
