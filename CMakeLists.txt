@@ -3,6 +3,43 @@ cmake_minimum_required(VERSION 3.16)
 # Set CUDA option before project declaration
 option(USE_CUDA "Enable CUDA support" ON)
 
+# Set CUDA architectures before project() call (required by CMake)
+# RTX 4090 uses compute capability 8.9 (Ada Lovelace)
+if(USE_CUDA)
+    set(CMAKE_CUDA_ARCHITECTURES "75;80;86;89" CACHE STRING "CUDA architectures")
+    
+    # Set CUDA compiler path if not already set
+    if(NOT DEFINED CMAKE_CUDA_COMPILER)
+        # Try common CUDA installation paths
+        if(EXISTS "/usr/local/cuda-12.6/bin/nvcc")
+            set(CMAKE_CUDA_COMPILER "/usr/local/cuda-12.6/bin/nvcc" CACHE FILEPATH "CUDA compiler")
+        elseif(EXISTS "/usr/local/cuda/bin/nvcc")
+            set(CMAKE_CUDA_COMPILER "/usr/local/cuda/bin/nvcc" CACHE FILEPATH "CUDA compiler")
+        elseif(EXISTS "$ENV{CUDA_HOME}/bin/nvcc")
+            set(CMAKE_CUDA_COMPILER "$ENV{CUDA_HOME}/bin/nvcc" CACHE FILEPATH "CUDA compiler")
+        elseif(EXISTS "$ENV{CUDA_PATH}/bin/nvcc")
+            set(CMAKE_CUDA_COMPILER "$ENV{CUDA_PATH}/bin/nvcc" CACHE FILEPATH "CUDA compiler")
+        else()
+            # Let CMake find it in PATH
+            find_program(NVCC_EXECUTABLE nvcc
+                PATHS
+                /usr/local/cuda-12.6/bin
+                /usr/local/cuda/bin
+                $ENV{CUDA_HOME}/bin
+                $ENV{CUDA_PATH}/bin
+                PATH_SUFFIXES bin
+            )
+            if(NVCC_EXECUTABLE)
+                set(CMAKE_CUDA_COMPILER "${NVCC_EXECUTABLE}" CACHE FILEPATH "CUDA compiler")
+            endif()
+        endif()
+        
+        if(CMAKE_CUDA_COMPILER)
+            message(STATUS "Using CUDA compiler: ${CMAKE_CUDA_COMPILER}")
+        endif()
+    endif()
+endif()
+
 # Conditionally include CUDA language
 if(USE_CUDA)
     project(fastLEC VERSION 0.1.0 LANGUAGES C CXX CUDA)
@@ -99,8 +136,11 @@ if(USE_CUDA)
     endif()
     
     if(CUDA_ENABLED)
-        # Set CUDA architectures (only newer ones to avoid deprecation warnings)
-        set(CMAKE_CUDA_ARCHITECTURES 75 80 86)
+        # CUDA architectures already set before project() call
+        # Update if needed (RTX 4090 = 89, RTX 3090 = 86, RTX 2080 = 75, V100 = 70)
+        if(NOT CMAKE_CUDA_ARCHITECTURES)
+            set(CMAKE_CUDA_ARCHITECTURES "75;80;86;89" CACHE STRING "CUDA architectures" FORCE)
+        endif()
         
         # Print CUDA environment information for debugging
         message(STATUS "CUDA_HOME: $ENV{CUDA_HOME}")
@@ -211,14 +251,15 @@ endif()
 # XGBoost submodule
 option(USE_XGBOOST "Enable XGBoost support" ON)
 if(USE_XGBOOST AND EXISTS "${CMAKE_SOURCE_DIR}/deps/xgboost/CMakeLists.txt")
-    # Set XGBoost build options to avoid ABI issues
-    set(XGBOOST_USE_CUDA OFF CACHE BOOL "Build XGBoost with CUDA support" FORCE)
-    set(XGBOOST_USE_OPENMP ON CACHE BOOL "Build XGBoost with OpenMP support" FORCE)
-    set(XGBOOST_USE_NCCL OFF CACHE BOOL "Build XGBoost with NCCL support" FORCE)
-    set(XGBOOST_USE_HIP OFF CACHE BOOL "Build XGBoost with HIP support" FORCE)
-    set(XGBOOST_USE_SYCL OFF CACHE BOOL "Build XGBoost with SYCL support" FORCE)
-    set(XGBOOST_USE_MPI OFF CACHE BOOL "Build XGBoost with MPI support" FORCE)
-    set(XGBOOST_USE_FEDERATED OFF CACHE BOOL "Build XGBoost with Federated Learning support" FORCE)
+    # Set XGBoost build options to avoid ABI issues and CUDA conflicts
+    # IMPORTANT: Use USE_CUDA (not XGBOOST_USE_CUDA) - this is XGBoost's option name
+    # Force disable CUDA in XGBoost to avoid compilation conflicts with main project's CUDA
+    set(USE_CUDA OFF CACHE BOOL "Build XGBoost with CUDA support" FORCE)
+    set(USE_NCCL OFF CACHE BOOL "Build XGBoost with NCCL support" FORCE)
+    set(USE_HIP OFF CACHE BOOL "Build XGBoost with HIP support" FORCE)
+    set(USE_SYCL OFF CACHE BOOL "Build XGBoost with SYCL support" FORCE)
+    set(USE_MPI OFF CACHE BOOL "Build XGBoost with MPI support" FORCE)
+    set(USE_FEDERATED OFF CACHE BOOL "Build XGBoost with Federated Learning support" FORCE)
     
     # Ensure consistent C++ standard
     set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard" FORCE)
@@ -768,7 +809,7 @@ if(EXISTING_SOURCES)
     # Set CUDA properties for the target
     if(CUDA_ENABLED)
         set_target_properties(fastLEC PROPERTIES
-            CUDA_ARCHITECTURES 75 80 86
+            CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}"
         )
     endif()
     
@@ -840,7 +881,7 @@ if(BUILD_LIBRARY AND EXISTING_SOURCES)
     # Set CUDA properties for the library target
     if(CUDA_ENABLED)
         set_target_properties(fastLEC_lib PROPERTIES
-            CUDA_ARCHITECTURES 75 80 86
+            CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}"
         )
     endif()
     

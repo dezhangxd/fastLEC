@@ -460,8 +460,8 @@ int gpu_run(glob_ES *ges, int verbose)
 
     if (verbose > 1)
     {
-        printf("c [gpuInfo] PI_num = %u, PO_lit = %u, mem_sz = %u, n_ops = %u\n", ges->PI_num, ges->PO_lit, ges->mem_sz, ges->n_ops);
-        printf(";; r_bits = %u, r_max = %llu\n", r_bits, r_max);
+        printf("c [gpuInfo] PI_num = %u, PO_lit = %u, mem_sz = %u, n_ops = %u, ", ges->PI_num, ges->PO_lit, ges->mem_sz, ges->n_ops);
+        printf(" r_bits = %u, r_max = %llu\n", r_bits, r_max);
         fflush(stdout);
     }
     bvec_t festivals[6] = {

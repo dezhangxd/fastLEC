@@ -2,7 +2,7 @@ clear;
 clear;
 
 # ./clean.sh
-./build.sh
+./build.sh cuda
 
 BUILD_DIR="build"
 
@@ -15,13 +15,13 @@ BUILD_DIR="build"
 # command="-m pBDD -c 32 -t 50"
 # command="-m PPE_sweeping -c 1 -v 2 -t 500 -p log_sub_aiger 1 -p log_dir ./logs/"
 # command="-m PPE_sweeping -c 1 -v 2 -t 500 -p log_features 1 -p log_dir ./logs/"
-command="-m schedule_sweeping -c 8 -v 2 -t 100"
+command="-m gpuES -c 8 -v 2 -t 100"
 # command="-m pSAT_sweeping -c 8 -v 2 -t 100 -p vis 1 -p log_dir ./vis/"
 
 
 # rm -rf *.aig
-# ./${BUILD_DIR}/bin/fastLEC -i ../ins/all/test_11_TOP7.aiger $command |gnomon
-./${BUILD_DIR}/bin/fastLEC -i ../ins/sub_aigers_solve/test_13_TOP12_42.aig $command |gnomon
+./${BUILD_DIR}/bin/fastLEC -i ../ins/all/test_11_TOP6.aiger $command |gnomon
+# ./${BUILD_DIR}/bin/fastLEC -i ../ins/sub_aigers_solve/test_13_TOP12_42.aig $command |gnomon
 
 # ./${BUILD_DIR}/bin/fastLEC -i ../ins/miter_right/bit5/mul5o5.aig $command |gnomon
 # ./${BUILD_DIR}/bin/fastLEC -i ../ins/miter_right/bit14/mul14o14.aig $command |gnomon
