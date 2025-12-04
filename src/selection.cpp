@@ -166,7 +166,7 @@ fastLEC::Prover::select_schedule_threads(std::shared_ptr<fastLEC::XAG> xag,
 
     std::vector<double> features_double = xag->generate_features();
     std::vector<float> features(features_double.begin(), features_double.end());
-    assert(features.size() == 35); // 35 features
+    assert(features.size() == 32); // 32 features
 
     // check NaN and inf
     for (size_t i = 0; i < features.size(); i++)
@@ -185,14 +185,14 @@ fastLEC::Prover::select_schedule_threads(std::shared_ptr<fastLEC::XAG> xag,
     DMatrixHandle dtest_bdd_local = nullptr;
 
     if (XGDMatrixCreateFromMat(
-            features.data(), 1, 36, -1e8, &dtest_sat_local) != 0)
+            features.data(), 1, features.size(), -1e8, &dtest_sat_local) != 0)
     {
         std::cout << "c [Error] Failed to create DMatrix for SAT" << std::endl;
         exit(0);
     }
 
     if (XGDMatrixCreateFromMat(
-            features.data(), 1, 36, -1e8, &dtest_bdd_local) != 0)
+            features.data(), 1, features.size(), -1e8, &dtest_bdd_local) != 0)
     {
         std::cout << "c [Error] Failed to create DMatrix for BDD" << std::endl;
         XGDMatrixFree(dtest_sat_local);
@@ -262,12 +262,12 @@ fastLEC::Prover::select_schedule_threads(std::shared_ptr<fastLEC::XAG> xag,
     XGDMatrixFree(dtest_sat_local);
     XGDMatrixFree(dtest_bdd_local);
 
-    // 根据can_use_BDD和can_use_ES设置线程分配方案
+    // Set the thread allocation strategy based on can_use_BDD and can_use_ES
     int n_threads_SAT = 0;
     int n_threads_ES = 0;
     int n_threads_BDD = 0;
 
-    // BDD最多只分配1线程（可用时），否则为0
+    // at most 1 thread for BDD (when enable), otherwise 0
     if (can_use_BDD)
         n_threads_BDD = 1;
     else
@@ -514,10 +514,11 @@ std::vector<double> fastLEC::XAG::generate_features()
             (idis.size() - 1);
 
     features.push_back(max_idis);
-    features.push_back(min_idis);
+    (void) min_idis;
+    // features.push_back(min_idis);
     features.push_back(avg_idis);
     features_names.push_back("max_idis");
-    features_names.push_back("min_idis");
+    // features_names.push_back("min_idis");
     features_names.push_back("avg_idis");
 
     double max_odis =
@@ -530,10 +531,11 @@ std::vector<double> fastLEC::XAG::generate_features()
             (odis.size() - 1);
 
     features.push_back(max_odis);
-    features.push_back(min_odis);
+    (void) min_odis;
+    // features.push_back(min_odis);
     features.push_back(avg_odis);
     features_names.push_back("max_odis");
-    features_names.push_back("min_odis");
+    // features_names.push_back("min_odis");
     features_names.push_back("avg_odis");
 
     double max_sum_dis = 0.0, min_sum_dis = 0.0, avg_sum_dis = 0.0;
@@ -582,11 +584,13 @@ std::vector<double> fastLEC::XAG::generate_features()
         : std::accumulate(out_degree.begin() + 1, out_degree.end() - 1, 0.0) /
             (out_degree.size() - 2);
 
+
     features.push_back(max_out_degree);
-    features.push_back(min_out_degree);
+    (void) min_out_degree;
+    // features.push_back(min_out_degree);
     features.push_back(avg_out_degree);
     features_names.push_back("max_out_degree");
-    features_names.push_back("min_out_degree");
+    // features_names.push_back("min_out_degree");
     features_names.push_back("avg_out_degree");
 
     // 5.1 cost SAT
