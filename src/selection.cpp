@@ -354,7 +354,7 @@ fastLEC::Prover::select_half_threads(std::shared_ptr<fastLEC::XAG> xag [[maybe_u
     int n_threads_BDD = 0;
     if (n_threads_ES > 1)
         n_threads_ES -= 1, n_threads_BDD = 1;
-    return {n_threads_SAT, n_threads_BDD, n_threads_BDD};
+    return {n_threads_SAT, n_threads_ES, n_threads_BDD};
 }
 
 std::vector<int>

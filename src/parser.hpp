@@ -363,7 +363,7 @@ public:
             printf("c "
                    "-----------------------------------------------------------"
                    "-\n");
-            printf("c fastLEC v1.0\n");
+            printf("c fastLEC v1.1\n");
             printf("c Author: Xindi Zhang\n");
             printf("c Email: dezhangxd96@gmail.com\n");
             printf("c "
